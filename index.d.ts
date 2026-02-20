@@ -430,17 +430,17 @@ export class Connection {
    * @param handler - Notification handler function
    * @returns Connection instance for chaining
    * @example
-   * connection.on('step.success', 'order_placed', (notif) => {
+   * connection.subscribe('step.success', 'order_placed', (notif) => {
    *   console.log('Order placed successfully');
    *   notif.ack();
    * });
    * 
-   * connection.on('rule.violated', 'product_delivery@order_placed', (notif) => {
+   * connection.subscribe('rule.violated', 'product_delivery@order_placed', (notif) => {
    *   console.error('Validation failed:', notif.message);
    *   notif.ack();
    * });
    */
-  on(event: string, stepIdentifier: string, handler: (notification: any) => void): Connection;
+  subscribe(event: string, stepIdentifier: string, handler: (notification: any) => void): Connection;
   
   /**
    * Unsubscribe from notification events
@@ -448,7 +448,7 @@ export class Connection {
    * @param stepIdentifier - Step name or "contractName@stepName"
    * @returns Connection instance for chaining
    */
-  off(event: string, stepIdentifier: string): Connection;
+  unsubscribe(event: string, stepIdentifier: string): Connection;
   
   /**
    * Close the WebSocket connection

@@ -351,22 +351,22 @@ export class Connection {
    * @returns {Connection} - Returns this for chaining
    * 
    * @example
-   * // Thread-level events (2 params - no stepName)
-   * thread.on('thread.cancelled', (notif) => { ... });
-   * thread.on('thread.completed', (notif) => { ... });
-   * thread.on('thread.*', (notif) => { ... }); // All thread events
+   * // Thread-level events (2 params)
+   * thread.subscribe('thread.completed', (notif) => { ... });
+   * thread.subscribe('thread.cancelled', (notif) => { ... });
+   * thread.subscribe('thread.*', (notif) => { ... }); // All thread events
    * 
-   * // Step-level events (3 params - with stepName)
-   * thread.on('step.success', 'order_placed', (notif) => { ... });
-   * thread.on('step.failed', 'order_placed', (notif) => { ... });
-   * thread.on('rule.violated', 'order_placed', (notif) => { ... });
-   * thread.on('rule.passed', 'order_placed', (notif) => { ... });
+   * // Step-level events (3 params)
+   * thread.subscribe('step.success', 'order_placed', (notif) => { ... });
+   * thread.subscribe('step.failed', 'order_placed', (notif) => { ... });
+   * thread.subscribe('rule.violated', 'order_placed', (notif) => { ... });
+   * thread.subscribe('rule.passed', 'order_placed', (notif) => { ... });
    * 
    * // Wildcards
-   * thread.on('step.*', 'order_placed', (notif) => { ... }); // All step events for this step
-   * thread.on('*', 'order_placed', (notif) => { ... });      // All events for this step
+   * thread.subscribe('step.*', 'order_placed', (notif) => { ... }); // All step events for this step
+   * thread.subscribe('*', 'order_placed', (notif) => { ... });      // All events for this step
    */
-  on(event, stepNameOrHandler, handler) {
+  subscribe(event, stepNameOrHandler, handler) {
     // Determine if this is 2-param (thread-level) or 3-param (step-level) signature
     let stepName;
     let actualHandler;
@@ -420,7 +420,7 @@ export class Connection {
    * // Step-level events (2 params)
    * thread.off('step.success', 'order_placed');
    */
-  off(event, stepName = '') {
+  unsubscribe(event, stepName = '') {
     const handlerKey = `${event}:${stepName}`;
     this.notificationHandlers.delete(handlerKey);
     
