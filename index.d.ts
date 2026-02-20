@@ -157,6 +157,34 @@ export class ArchivedThread {
    * @returns Promise resolving to validation results
    */
   validationResults(options?: { limit?: number }): Promise<ValidationResult[]>;
+
+  /**
+   * Get complete thread data in a single query (recommended for efficiency)
+   * Fetches thread metadata, steps with history, and validation results in one GraphQL call
+   * @param options - Query options
+   * @returns Promise resolving to complete thread data
+   */
+  getCompleteData(options?: {
+    stepHistoryLimit?: number;
+    validationLimit?: number;
+    stepName?: string;
+    idempotencyKey?: string;
+    status?: StepStatus;
+  }): Promise<{
+    id: string;
+    contractId: string;
+    contractName: string;
+    contractVersion: string;
+    ownerId: string;
+    companyId: string;
+    status: string;
+    startedAt: string;
+    completedAt?: string;
+    error?: string;
+    refs: any;
+    steps: Array<ArchivedStepData & { history: StepHistoryData[] }>;
+    validationResults: ValidationResult[];
+  }>;
 }
 
 export interface NotificationData {
