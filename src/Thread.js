@@ -874,35 +874,35 @@ export class ThreadInstance {
     });
   }
 
-  /**
-   * Wait for a notification for a specific step
-   * @param {string} stepName - Name of the step to wait for
-   * @param {Object} options - Wait options
-   * @param {number} [options.timeout=5000] - Timeout in milliseconds
-   * @param {Array<string>} [options.statuses] - Only resolve for these statuses (e.g., ['success', 'failed'])
-   * @returns {Promise<Notification>} - Resolves with notification when it arrives
-   */
-  waitFor(stepName, options = {}) {
-    const { timeout = 5000, statuses = null } = options;
-    
-    if (!stepName || typeof stepName !== 'string') {
-      return Promise.reject(new Error('Step name must be a non-empty string'));
-    }
-    
-    return new Promise((resolve, reject) => {
-      const timeoutId = setTimeout(() => {
-        this.pendingWaits.delete(stepName);
-        reject(new Error(`Timeout waiting for step: ${stepName} (${timeout}ms)`));
-      }, timeout);
-
-      this.pendingWaits.set(stepName, {
-        resolve,
-        reject,
-        timeoutId,
-        statuses
-      });
-    });
-  }
+  // /**
+  //  * Wait for a notification for a specific step
+  //  * @param {string} stepName - Name of the step to wait for
+  //  * @param {Object} options - Wait options
+  //  * @param {number} [options.timeout=5000] - Timeout in milliseconds
+  //  * @param {Array<string>} [options.statuses] - Only resolve for these statuses (e.g., ['success', 'failed'])
+  //  * @returns {Promise<Notification>} - Resolves with notification when it arrives
+  //  */
+  // waitFor(stepName, options = {}) {
+  //   const { timeout = 5000, statuses = null } = options;
+  //   
+  //   if (!stepName || typeof stepName !== 'string') {
+  //     return Promise.reject(new Error('Step name must be a non-empty string'));
+  //   }
+  //   
+  //   return new Promise((resolve, reject) => {
+  //     const timeoutId = setTimeout(() => {
+  //       this.pendingWaits.delete(stepName);
+  //       reject(new Error(`Timeout waiting for step: ${stepName} (${timeout}ms)`));
+  //     }, timeout);
+  //
+  //     this.pendingWaits.set(stepName, {
+  //       resolve,
+  //       reject,
+  //       timeoutId,
+  //       statuses
+  //     });
+  //   });
+  // }
   
   /**
    * Add external references to this thread
