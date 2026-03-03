@@ -957,37 +957,15 @@ export class ThreadInstance {
     return this.addRefs({ [refKey]: threadId });
   }
 
-  /**
-   * End the thread on the server
-   * Defaults to 'cancelled' status, can be marked as 'completed' for successful completion
-   * For contract-linked threads, 'completed' status is only allowed when terminal state is reached
-   * Requires appropriate permissions (owner or participant with thread.end permission)
-   * @param {string} status - Thread end status: 'cancelled' (default) or 'completed'
-   * @param {string|Object} reason - Optional reason for ending (string) or data object
-   * @returns {Promise<Object>} - Server response
-   * @example
-   * // Cancel thread (default)
-   * await thread.end();
-   * await thread.end('cancelled', 'Order cancelled by customer');
-   * 
-   * // Complete thread (only for non-contract threads or when terminal state reached)
-   * await thread.end('completed', 'All steps finished');
-   * 
-   * // With data object
-   * await thread.end('cancelled', { reason: 'Order cancelled', cancelledBy: 'customer' });
-   */
-  async end(status = 'cancelled', reason = '') {
-    return this._endThread(status, reason);
-  }
 
   /**
-   * Close the thread on the server
+   * Close the thread and mark it as cancelled on the server
    * @deprecated Use thread.end('cancelled', reason) instead
    * Marks the thread as cancelled
    * @param {string|Object} reason - Optional reason for closure (string) or data object
    * @returns {Promise<Object>} - Server response
    */
-  async close(reason = '') {
+  async cancel(reason = '') {
     return this._endThread('cancelled', reason);
   }
 
