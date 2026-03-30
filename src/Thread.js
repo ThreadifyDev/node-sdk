@@ -373,12 +373,12 @@ export class Connection {
     
     if (typeof stepNameOrHandler === 'function') {
       // 2-param signature: on(event, handler)
-      // Thread-level events - use empty string for stepName
-      stepName = '';
+      // Thread-level events - use 'global' for stepName
+      stepName = 'global';  
       actualHandler = stepNameOrHandler;
     } else {
       // 3-param signature: on(event, stepName, handler)
-      stepName = stepNameOrHandler;
+      stepName = stepNameOrHandler || 'global';  
       actualHandler = handler;
     }
     
