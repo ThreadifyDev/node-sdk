@@ -1,6 +1,6 @@
 {
   "name": "@threadify/sdk",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "description": "JavaScript SDK for Threadify - Execute business process graphs with context—track what happened, validate every step, and trigger context-aware actions",
   "main": "dist/index.cjs",
   "module": "src/index.js",
@@ -23,21 +23,14 @@
     "publish:beta": "npm publish --tag beta"
   },
   "keywords": [
-    "workflow",
-    "orchestration",
-    "state-machine",
+    "service-delivery",
+    "workflow-cordination",
     "business-process",
-    "event-driven",
-    "audit-trail",
-    "saga-pattern",
-    "distributed-transactions",
-    "websocket",
-    "real-time-notifications",
-    "validation",
-    "contract-enforcement",
-    "idempotency",
-    "retry-logic",
-    "thread-management"
+    "threadify",
+    "threadify.dev",
+    "threadify-dev",
+    "distributed tracing",
+    "service-delivery-intelligence"
   ],
   "author": "Threadify Team",
   "license": "MIT",
@@ -56,8 +49,8 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/intelijence/threadify-engine",
+    "url": "https://github.com/ThreadifyDev/node-sdk",
     "directory": "threadify-sdk"
   },
-  "homepage": "https://github.com/intelijence/threadify-engine/tree/main/threadify-sdk"
+  "homepage": "https://github.com/ThreadifyDev/node-sdk"
 }
