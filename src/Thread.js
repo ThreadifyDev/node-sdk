@@ -442,22 +442,17 @@ export class Connection {
    * @returns {[string, string]} - [source, type]
    * 
    * Examples:
-   *   'step.success' → ['execution', 'success']
-   *   'rule.violated' → ['validation', 'violated']
-   *   'step.*' → ['execution', '*']
+   *   'step.success' → ['step', 'success']
+   *   'rule.violated' → ['rule', 'violated']
+   *   'step.*' → ['step', '*']
    *   '*' → ['*', '*']
    */
   _parseEvent(event) {
-    // Replace semantic names with NATS source names
-    const normalized = event
-      .replace('step', 'execution')
-      .replace('rule', 'validation');
-    
-    // Split on dot
-    const parts = normalized.split('.');
+    // Split on dot - no translation needed, engine uses step/rule directly
+    const parts = event.split('.');
     
     return [
-      parts[0] || '*',  // source: execution | validation | *
+      parts[0] || '*',  // source: step | rule | thread | *
       parts[1] || '*'   // type: success | failed | passed | violated | *
     ];
   }
@@ -465,7 +460,7 @@ export class Connection {
   /**
    * Build event types array for subscription based on source and type
    * @private
-   * @param {string} source - Source: execution | validation | *
+   * @param {string} source - Source: step | rule | thread | *
    * @param {string} type - Type: success | failed | passed | violated | *
    * @returns {string[]} - Array of event types for subscription
    */
@@ -475,15 +470,15 @@ export class Connection {
     // Handle wildcards
     if (source === '*' && type === '*') {
       // Subscribe to all events
-      return ['execution.success', 'execution.failed', 'validation.passed', 'validation.violated'];
+      return ['step.success', 'step.failed', 'rule.passed', 'rule.violated'];
     }
     
-    if (source === 'execution' && type === '*') {
-      return ['execution.success', 'execution.failed'];
+    if (source === 'step' && type === '*') {
+      return ['step.success', 'step.failed'];
     }
     
-    if (source === 'validation' && type === '*') {
-      return ['validation.passed', 'validation.violated'];
+    if (source === 'rule' && type === '*') {
+      return ['rule.passed', 'rule.violated'];
     }
     
     // Specific event
@@ -599,18 +594,11 @@ export class Connection {
    */
   _getEventPattern(notification) {
     // Map notification source and type back to SDK event pattern
-    // execution.success → step.success
-    // validation.violated → rule.violated
-    const source = notification.source || 'execution';
+    // Engine now uses step/rule directly, no translation needed
+    const source = notification.source || 'step';
     const type = notification.notificationType ? notification.notificationType.split('.')[1] : 'success';
     
-    const sourceMap = {
-      'execution': 'step',
-      'validation': 'rule',
-      'thread': 'thread'
-    };
-    
-    return `${sourceMap[source] || source}.${type}`;
+    return `${source}.${type}`;
   }
 
   /**
