@@ -16,17 +16,17 @@ export class Connection {
     this.isConnected = false;
     this.activeThreads = new Map(); // Map of threadId -> thread info
     this.threads = new Map(); // Map of threadId -> ThreadInstance (for notification routing)
-    
+
     // Global notification handlers (step-specific) - v2.0.0 API
     // Maps event pattern to stepName to handlers
     // e.g., 'step.success' -> 'order_placed' -> [handler1, handler2]
     this.notificationHandlers = new Map();
-    
+
     this.processedNotifications = new Set(); // Track processed notification IDs
     this.maxProcessedSize = 10000; // Prevent memory leak
     this._dataRetriever = null; // Lazy-initialized DataRetriever
     this._activeSubscriptions = new Map(); // Track active subscriptions for merging
-    
+
     this._setupNotificationListener();
   }
 
@@ -51,7 +51,7 @@ export class Connection {
       if (!this.graphqlUrl) {
         throw new Error('GraphQL URL not configured. Pass graphqlUrl to Threadify.connect() or use wsUrl for auto-derivation.');
       }
-      
+
       this._dataRetriever = new DataRetriever(this.graphqlUrl, this.apiKey);
     }
     return this._dataRetriever;
@@ -110,8 +110,9 @@ export class Connection {
    * Start a new thread (returns a ThreadInstance)
    * @param {...any} args - Variable arguments:
    *   - start() - Non-contract workflow
-   *   - start(serviceName) - Non-contract with specific service
-   *   - start(contractName, serviceName) - Contract workflow (contractName can be "name:version")
+   *   - start(label) - Non-contract with label
+   *   - start(label, contractName) - Contract workflow
+   *   - start(label, contractName, { serviceName, refs }) - Contract with options
    * @returns {Promise<ThreadInstance>} - Returns a ThreadInstance for fluent API
    */
   async start(...args) {
@@ -121,20 +122,24 @@ export class Connection {
 
     let contractName = null;
     let serviceName = null;
+    let options = {};
 
     if (args.length === 0) {
-      // Non-contract workflow
-      serviceName = this.serviceName;
-      contractName = null;
+      // start() -> non-contract
     } else if (args.length === 1) {
-      // Non-contract with specific service
-      serviceName = args[0];
-      contractName = null;
+      // start(label) -> non-contract with label
+      options = { label: args[0] };
     } else if (args.length === 2) {
-      // Contract workflow (contractName, serviceName)
-      [contractName, serviceName] = args;
+      // start(label, contractName) -> contract
+      options = { label: args[0] };
+      contractName = args[1];
+    } else if (args.length === 3) {
+      // start(label, contractName, { serviceName, refs })
+      options = { label: args[0], ...args[2] };
+      contractName = args[1];
+      serviceName = args[2] ? args[2].serviceName : null;
     } else {
-      throw new Error('Invalid arguments. Use start(), start(serviceName), or start(contractName, serviceName)');
+      throw new Error('Invalid arguments. Use start(), start(label), start(label, contractName), or start(label, contractName, options)');
     }
 
     // Validate parameters
@@ -143,6 +148,9 @@ export class Connection {
     }
     if (serviceName && typeof serviceName !== 'string') {
       throw new Error('Service name must be a string');
+    }
+    if (options && typeof options !== 'object') {
+      throw new Error('Options must be an object');
     }
 
     return new Promise((resolve, reject) => {
@@ -153,6 +161,16 @@ export class Connection {
           serviceName: serviceName || this.serviceName
         }
       };
+
+      // Add label to refs if provided
+      if (options && options.label) {
+        message.refs.label = options.label;
+      }
+
+      // Add any custom refs if provided
+      if (options && options.refs && typeof options.refs === 'object') {
+        Object.assign(message.refs, options.refs);
+      }
 
       // Only include role for contract-based workflows
       if (contractName) {
@@ -227,7 +245,7 @@ export class Connection {
   async close() {
     return new Promise((resolve) => {
       const message = { action: 'closeConnection' };
-      
+
       const responseHandler = (data) => {
         if (data.action === 'closeConnection') {
           this.isConnected = false;
@@ -253,7 +271,7 @@ export class Connection {
 
     const existing = this._activeSubscriptions.get(stepName) || [];
     const merged = [...new Set([...existing, ...eventTypes])];
-    
+
     // Only send if changed
     if (JSON.stringify(existing.sort()) !== JSON.stringify(merged.sort())) {
       this._send({
@@ -261,7 +279,7 @@ export class Connection {
         stepName: stepName,
         eventTypes: merged
       });
-      
+
       this._activeSubscriptions.set(stepName, merged);
     }
   }
@@ -370,38 +388,38 @@ export class Connection {
     // Determine if this is 2-param (thread-level) or 3-param (step-level) signature
     let stepName;
     let actualHandler;
-    
+
     if (typeof stepNameOrHandler === 'function') {
       // 2-param signature: on(event, handler)
       // Thread-level events - use 'global' for stepName
-      stepName = 'global';  
+      stepName = 'global';
       actualHandler = stepNameOrHandler;
     } else {
       // 3-param signature: on(event, stepName, handler)
-      stepName = stepNameOrHandler || 'global';  
+      stepName = stepNameOrHandler || 'global';
       actualHandler = handler;
     }
-    
+
     if (typeof actualHandler !== 'function') {
       throw new Error('Handler must be a function');
     }
-    
+
     // Parse event to get source and type for NATS subscription
     const [source, type] = this._parseEvent(event);
-    
+
     // Build event types array for subscription
     const eventTypes = this._buildEventTypes(source, type);
-    
+
     // Send subscription to server
     this._sendSubscription(stepName, eventTypes);
-    
+
     // Store handler
     const handlerKey = `${event}:${stepName}`;
     if (!this.notificationHandlers.has(handlerKey)) {
       this.notificationHandlers.set(handlerKey, []);
     }
     this.notificationHandlers.get(handlerKey).push(actualHandler);
-    
+
     return this;
   }
 
@@ -423,15 +441,15 @@ export class Connection {
   unsubscribe(event, stepName = '') {
     const handlerKey = `${event}:${stepName}`;
     this.notificationHandlers.delete(handlerKey);
-    
+
     // Check if any handlers remain for this step
     const hasHandlers = Array.from(this.notificationHandlers.keys())
       .some(key => key.endsWith(`:${stepName}`));
-    
+
     if (!hasHandlers) {
       this._sendUnsubscription(stepName);
     }
-    
+
     return this;
   }
 
@@ -450,7 +468,7 @@ export class Connection {
   _parseEvent(event) {
     // Split on dot - no translation needed, engine uses step/rule directly
     const parts = event.split('.');
-    
+
     return [
       parts[0] || '*',  // source: step | rule | thread | *
       parts[1] || '*'   // type: success | failed | passed | violated | *
@@ -466,21 +484,21 @@ export class Connection {
    */
   _buildEventTypes(source, type) {
     const eventTypes = [];
-    
+
     // Handle wildcards
     if (source === '*' && type === '*') {
       // Subscribe to all events
       return ['step.success', 'step.failed', 'rule.passed', 'rule.violated'];
     }
-    
+
     if (source === 'step' && type === '*') {
       return ['step.success', 'step.failed'];
     }
-    
+
     if (source === 'rule' && type === '*') {
       return ['rule.passed', 'rule.violated'];
     }
-    
+
     // Specific event
     return [`${source}.${type}`];
   }
@@ -493,12 +511,12 @@ export class Connection {
     this.ws.on('message', (data) => {
       try {
         const message = JSON.parse(data.toString());
-        
+
         // Handle single notification (push-based with ackToken)
         if (message.action === 'notification') {
           this._handleNotification(message.notification, message.ackToken);
         }
-        
+
         // Handle notification batch
         if (message.action === 'notification_batch') {
           message.notifications.forEach(notif => {
@@ -551,7 +569,7 @@ export class Connection {
    */
   _handleNotification(notificationData, ackToken = null) {
     const notifID = notificationData.notificationId;
-    
+
     // Deduplicate notifications
     if (this.processedNotifications.has(notifID)) {
       this._debugLog('[Notification] Duplicate ignored');
@@ -559,23 +577,23 @@ export class Connection {
       this._sendAck(notifID, notificationData.threadId, ackToken);
       return;
     }
-    
+
     // Add to processed set
     this.processedNotifications.add(notifID);
-    
+
     // Prevent memory leak - remove oldest if too large
     if (this.processedNotifications.size > this.maxProcessedSize) {
       const firstItem = this.processedNotifications.values().next().value;
       this.processedNotifications.delete(firstItem);
     }
-    
+
     const notification = new Notification(notificationData, this, ackToken);
-    
+
     // Determine event pattern from notification
     // notification.source: 'execution' | 'validation' | 'thread'
     // notification.notificationType: 'execution.success', 'validation.violated', etc.
     const eventPattern = this._getEventPattern(notification);
-    
+
     // Trigger handlers for this event pattern
     this._triggerHandlers(eventPattern, notification);
 
@@ -597,7 +615,7 @@ export class Connection {
     // Engine now uses step/rule directly, no translation needed
     const source = notification.source || 'step';
     const type = notification.notificationType ? notification.notificationType.split('.')[1] : 'success';
-    
+
     return `${source}.${type}`;
   }
 
@@ -610,25 +628,25 @@ export class Connection {
   _triggerHandlers(eventPattern, notification) {
     const stepName = notification.stepName;
     const contractName = notification.contractName;
-    
+
     // Build possible handler keys to check
     const keysToCheck = [];
-    
+
     // 1. Exact match: "event:contract@stepName"
     if (contractName) {
       keysToCheck.push(`${eventPattern}:${contractName}@${stepName}`);
     }
-    
+
     // 2. Wildcard contract: "event:stepName"
     keysToCheck.push(`${eventPattern}:${stepName}`);
-    
+
     // 3. Wildcard type: "source.*:stepName" (e.g., "step.*:order_placed")
     const [source] = eventPattern.split('.');
     keysToCheck.push(`${source}.*:${stepName}`);
-    
+
     // 4. Full wildcard: "*:stepName"
     keysToCheck.push(`*:${stepName}`);
-    
+
     // Trigger all matching handlers
     keysToCheck.forEach(key => {
       const handlers = this.notificationHandlers.get(key);
@@ -665,7 +683,7 @@ export class Connection {
         ackToken: ackToken,
         processed: true
       };
-      
+
       this.ws.send(JSON.stringify(ackMessage));
       this._debugLog('[Connection] ACK sent');
     } catch (error) {
@@ -698,7 +716,7 @@ export class Connection {
           if (data.status === 'success') {
             this._debugLog(`Joined thread: ${data.threadId}`);
             this._debugLog(`Role: ${data.role}, AccessLevel: ${data.accessLevel}`);
-            
+
             // Create and return a ThreadInstance
             const threadInstance = new ThreadInstance(
               this,
@@ -707,7 +725,7 @@ export class Connection {
               data.role,
               null // refs
             );
-            
+
             resolve(threadInstance);
           } else {
             reject(new Error(data.message || 'Failed to join thread'));
@@ -833,11 +851,11 @@ export class ThreadInstance {
       accessLevel = "external",
       expiresIn = "24h"
     } = options;
-    
+
     if (!role) {
       throw new Error("Role is required for inviteParty");
     }
-    
+
     return new Promise((resolve, reject) => {
       this._onceResponse((message) => {
         if (message.status === 'success') {
@@ -852,7 +870,7 @@ export class ThreadInstance {
           reject(new Error(message.message || 'Failed to create invitation token'));
         }
       });
-      
+
       this._send({
         action: 'inviteParty',
         role,
@@ -891,7 +909,7 @@ export class ThreadInstance {
   //     });
   //   });
   // }
-  
+
   /**
    * Add external references to this thread
    * @param {Object} refs - Key-value pairs of external references
@@ -933,13 +951,13 @@ export class ThreadInstance {
     if (!threadId || typeof threadId !== 'string') {
       throw new Error('Thread ID must be a non-empty string');
     }
-    
+
     // Validate UUID format
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if (!uuidRegex.test(threadId)) {
       throw new Error('Invalid thread ID format');
     }
-    
+
     // Use addRefs under the hood with special prefix
     const refKey = `linkedThread:${relationship}`;
     return this.addRefs({ [refKey]: threadId });
@@ -980,7 +998,7 @@ export class ThreadInstance {
           if (message.status === 'success') {
             // Cleanup local state after successful end
             this._cleanup();
-            
+
             resolve({
               threadId: this.threadId,
               status: message.threadStatus,
@@ -1021,7 +1039,7 @@ export class ThreadInstance {
       pending.reject(new Error(`Thread closed while waiting for step: ${stepName}`));
     });
     this.pendingWaits.clear();
-    
+
     // Remove from connection's thread registry
     this.connection.threads.delete(this.threadId);
   }

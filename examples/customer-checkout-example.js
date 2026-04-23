@@ -22,12 +22,12 @@ async function runCheckout(customerId) {
   );
 
   // 2. Start a new thread (no contract)
-  const thread = await connection.start();
+  const thread = await connection.start("Checkout Thread");
   console.log('Thread started:', thread.id);
 
   // 3. Add external references — customer_id for support/CRM lookup
   await thread.addRefs({
-    customer_id: customerId,
+    customerId: customerId,
     order_id: `ORD-${Date.now()}`,
   });
 
@@ -95,6 +95,7 @@ async function runCheckout(customerId) {
   }
 
   console.log('Checkout complete:', thread.id);
+  await thread.complete()
   return thread.id;
 }
 

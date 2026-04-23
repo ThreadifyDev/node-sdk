@@ -199,21 +199,21 @@ export interface NotificationData {
 export class ThreadStep {
   /** Step name */
   readonly stepName: string;
-  
+
   /**
    * Set manual idempotency key
    * @param key - Idempotency key for deduplication
    * @returns This ThreadStep instance for chaining
    */
   idempotencyKey(key: string): ThreadStep;
-  
+
   /**
    * Add external references
    * @param refs - Reference key-value pairs
    * @returns This ThreadStep instance for chaining
    */
   addRefs(refs: ThreadRefs): ThreadStep;
-  
+
   /**
    * Add context data to this step
    * @param contextData - Key-value pairs to add to step context
@@ -221,7 +221,7 @@ export class ThreadStep {
    * @returns This ThreadStep instance for chaining
    */
   addContext(contextData: StepContext, isPrivate?: boolean): ThreadStep;
-  
+
   /**
    * Add a sub-step to be sent when this step completes
    * @param name - Sub-step name
@@ -234,7 +234,7 @@ export class ThreadStep {
    * step.subStep('apply_discount', { error: 'Invalid coupon' }, 'failed');
    */
   subStep(name: string, data?: SubStepData, status?: 'success' | 'failed'): ThreadStep;
-  
+
   /**
    * Mark step as successful
    * @param messageOrData - Success message (string) or data object
@@ -250,7 +250,7 @@ export class ThreadStep {
    * await step.success();
    */
   success(messageOrData?: string | StepContext): Promise<StepResult>;
-  
+
   /**
    * Mark step as failed
    * @param messageOrData - Failure message (string) or error data object
@@ -266,7 +266,7 @@ export class ThreadStep {
    * await step.failed();
    */
   failed(messageOrData?: string | StepContext): Promise<StepResult>;
-  
+
   /**
    * Mark step as error
    * @param messageOrData - Error message (string) or error data object
@@ -315,7 +315,7 @@ export class ThreadInstance {
   readonly role?: string;
   /** User's permissions in this thread */
   readonly permissions?: string;
-  
+
   /**
    * Create a new step in this thread
    * @param stepName - Name of the step
@@ -323,20 +323,20 @@ export class ThreadInstance {
    * @returns New ThreadStep instance
    */
   step(stepName: string, options?: ThreadOptions): ThreadStep;
-  
+
   /**
    * Invite another user to join this thread
    * @param options - Invitation options (role, permissions, expiration)
    * @returns Promise resolving to invitation response with token
    */
   inviteParty(options: InvitePartyOptions): Promise<InvitePartyResponse>;
-  
+
   /**
    * Get thread metadata
    * @returns Promise resolving to thread metadata
    */
   getMetadata(): Promise<any>;
-  
+
   /**
    * Close the thread on the server (marks thread as closed)
    * Requires appropriate permissions (owner or participant with thread.close permission)
@@ -352,7 +352,7 @@ export class ThreadInstance {
     closedAt: string;
     message: string;
   }>;
-  
+
   /**
    * Mark the thread as completed on the server
    * Useful for threads without contracts
@@ -369,14 +369,14 @@ export class ThreadInstance {
     closedAt: string;
     message: string;
   }>;
-  
+
   /**
    * Add a notification handler
    * @param eventName - Event name to listen for
    * @param handler - Event handler function
    */
   on(eventName: string, handler: (data: NotificationData) => void): void;
-  
+
   /**
    * Remove a notification handler
    * @param eventName - Event name
@@ -396,16 +396,16 @@ export class Connection {
   readonly isConnected: boolean;
   /** GraphQL endpoint URL */
   readonly graphqlUrl: string;
-  
+
   /**
    * Start a new thread
+   * @param label - Optional label for the thread
    * @param contractName - Contract name (optional for non-contract workflows)
-   * @param serviceName - Service name for role inference
-   * @param options - Thread options
+   * @param options - Additional options (serviceName, refs)
    * @returns Promise resolving to new ThreadInstance
    */
-  start(contractName?: string, serviceName?: string, options?: ThreadOptions): Promise<ThreadInstance>;
-  
+  start(label?: string, contractName?: string, options?: { serviceName?: string; refs?: ThreadRefs }): Promise<ThreadInstance>;
+
   /**
    * Join an existing thread
    * @param tokenOrThreadId - Thread token or thread ID
@@ -413,14 +413,14 @@ export class Connection {
    * @returns Promise resolving to ThreadInstance
    */
   join(tokenOrThreadId: string, role?: string): Promise<ThreadInstance>;
-  
+
   /**
    * Get archived thread by ID
    * @param threadId - Thread ID
    * @returns Promise resolving to archived thread
    */
   getThread(threadId: string): Promise<ArchivedThread>;
-  
+
   /**
    * Get archived thread by reference
    * @param refKey - Reference key
@@ -428,14 +428,14 @@ export class Connection {
    * @returns Promise resolving to archived thread
    */
   getThreadByRef(refKey: string, refValue: string): Promise<ArchivedThread>;
-  
+
   /**
    * Get multiple threads by reference
    * @param refQuery - Reference query {refKey, refValue}
    * @returns Promise resolving to array of archived threads
    */
   getThreadsByRef(refQuery: { refKey: string; refValue: string }): Promise<ArchivedThread[]>;
-  
+
   /**
    * Get thread chain starting from any thread
    * @param startThreadId - Starting thread ID (can be any thread in the chain)
@@ -443,7 +443,7 @@ export class Connection {
    * @returns Promise resolving to array of threads from starting thread to descendants
    */
   getThreadChain(startThreadId: string, maxDepth?: number): Promise<ArchivedThread[]>;
-  
+
   /**
    * Subscribe to notification events for a specific step
    * @param event - Event pattern:
@@ -469,7 +469,7 @@ export class Connection {
    * });
    */
   subscribe(event: string, stepIdentifier: string, handler: (notification: any) => void): Connection;
-  
+
   /**
    * Unsubscribe from notification events
    * @param event - Event pattern to unsubscribe from
@@ -477,7 +477,7 @@ export class Connection {
    * @returns Connection instance for chaining
    */
   unsubscribe(event: string, stepIdentifier: string): Connection;
-  
+
   /**
    * Close the WebSocket connection
    */
@@ -493,7 +493,7 @@ export class Threadify {
    * @returns Promise resolving to Connection instance
    */
   static connect(apiKey: string, serviceName?: string, options?: ThreadifyConnectOptions): Promise<Connection>;
-  
+
   /**
    * Create a Threadify instance with configuration
    * @param config - Configuration object
