@@ -16,9 +16,9 @@ import { Threadify } from '@threadify/sdk';
 async function runCheckout(customerId) {
   // 1. Connect to Threadify
   const connection = await Threadify.connect(
-    process.env.THREADIFY_LOCAL_API_KEY,
+    process.env.THREADIFY_API_KEY,
     'checkout-service',
-    { url: 'http://localhost:8081/threads' }
+    // { url: 'http://localhost:8081/threads' }
   );
 
   // 2. Start a new thread (no contract)
