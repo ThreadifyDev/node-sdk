@@ -482,6 +482,35 @@ export class Connection {
    * Close the WebSocket connection
    */
   close(): void;
+
+  /**
+   * Create an OpenTelemetry SpanExporter connected to this thread instance
+   * @param options - Exporter options
+   * @returns OTel SpanExporter instance
+   */
+  createSpanExporter(options?: { refs?: string[] }): ThreadifySpanExporter;
+}
+
+export class ThreadifySpanExporter {
+  /**
+   * Initialize the Threadify Span Exporter
+   * @param connection - An established Threadify Connection
+   * @param options - Configuration options
+   */
+  constructor(connection: Connection, options?: { refs?: string[] });
+
+  /**
+   * Export batch of spans
+   * @param spans - Array of ReadableSpans
+   * @param resultCallback - Callback to execute on complete
+   */
+  export(spans: any[], resultCallback: (result: any) => void): void;
+
+  /** Force flush */
+  forceFlush(): Promise<void>;
+
+  /** Shutdown the exporter */
+  shutdown(): Promise<void>;
 }
 
 export class Threadify {

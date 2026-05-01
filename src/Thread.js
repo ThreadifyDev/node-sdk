@@ -1,6 +1,7 @@
 import { ThreadStep } from './ThreadStep.js';
 import { Notification } from './Notification.js';
 import { DataRetriever, ArchivedThread, ArchivedStep } from './DataRetriever.js';
+import { ThreadifySpanExporter } from './OtelSpanExporter.js';
 
 /**
  * Connection - Represents a WebSocket connection to Threadify Engine
@@ -257,6 +258,16 @@ export class Connection {
       this._onceResponse(responseHandler);
       this._send(message);
     });
+  }
+
+  /**
+   * Create an OpenTelemetry SpanExporter connected to this thread instance
+   * @param {Object} options - Exporter options
+   * @param {string[]} [options.refs=[]] - Array of attribute keys to map to Threadify refs
+   * @returns {ThreadifySpanExporter} - OTel SpanExporter instance
+   */
+  createSpanExporter(options = {}) {
+    return new ThreadifySpanExporter(this, options);
   }
 
   /**

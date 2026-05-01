@@ -150,8 +150,10 @@ export class ThreadStep {
    * @returns {Promise<ThreadStep>} - Returns this for method chaining
    */
   async stop(status = 'success', messageOrData = '') {
-    // Set final state
-    this.event.finishedAt = new Date().toISOString();
+    // Set final state if not already set manually (e.g. by OTel exporter)
+    if (!this.event.finishedAt) {
+      this.event.finishedAt = new Date().toISOString();
+    }
     this.event.status = status;
     
     // Handle messageOrData - can be string or object

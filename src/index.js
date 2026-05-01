@@ -2,6 +2,7 @@ import WebSocket from 'ws';
 import { Connection, ThreadInstance } from './Thread.js';
 import { Notification } from './Notification.js';
 import { DataRetriever } from './DataRetriever.js';
+import { ThreadifySpanExporter } from './OtelSpanExporter.js';
 
 /**
  * @typedef {Object} ThreadifyConnectOptions
@@ -156,4 +157,4 @@ export class Threadify {
 export default Threadify;
 
 // Export classes for direct usage (DataRetriever is now internal)
-export { Connection, ThreadInstance, Notification };
+export { Connection, ThreadInstance, Notification, ThreadifySpanExporter };
