@@ -53,6 +53,13 @@ export class ThreadifySpanExporter {
       this.traceThreadMap.set(traceId, threadPromise);
     }
     
+      // Start cleanup timer to prevent memory leaks (traces are usually short-lived)
+      // We remove it from the map after 10 minutes. If a span for this trace arrives after 10 mins,
+      // it will simply create a new Thread, which is an acceptable edge case for long-running traces.
+      setTimeout(() => {
+        this.traceThreadMap.delete(traceId);
+      }, 10 * 60 * 1000).unref?.(); // Use unref if in Node.js so it doesn't keep process alive
+      
     return await this.traceThreadMap.get(traceId);
   }
 
@@ -122,19 +129,33 @@ export class ThreadifySpanExporter {
 
       // Map Status
       // SpanStatusCode: 0 = UNSET, 1 = OK, 2 = ERROR
-      // We map OK to success, ERROR/UNSET to failed.
+      // In OpenTelemetry, UNSET (0) is the default and implies no error occurred.
       const statusCode = span.status ? span.status.code : 0;
-      let targetStatus = 'failed';
+      let targetStatus = 'success';
       let message = span.status ? span.status.message : undefined;
       
-      if (statusCode === 1) { // OK
-        targetStatus = 'success';
+      if (statusCode === 2) { // ERROR
+        targetStatus = 'failed';
       }
       
       if (targetStatus === 'success') {
         await step.success(message);
       } else {
-        await step.failed(message || 'Span ended with error or unset status');
+        await step.failed(message || 'Span ended with error status');
+      }
+
+      // Root Span Auto-Complete
+      // If this span has no parent, it is the Root Span. When it ends, the trace is done.
+      // We automatically end the Threadify thread based on the root span's status.
+      if (!span.parentSpanId) {
+        if (targetStatus === 'success') {
+          await thread.complete('Root span completed successfully');
+        } else {
+          await thread.cancel(message || 'Root span failed');
+        }
+        
+        // Immediately clean up the map since the trace is completely finished
+        this.traceThreadMap.delete(span.spanContext().traceId);
       }
     } catch (error) {
       this.connection._debugLog('[ThreadifySpanExporter] Failed to process span:', error.message);
