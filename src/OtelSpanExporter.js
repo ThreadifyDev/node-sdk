@@ -45,21 +45,37 @@ export class ThreadifySpanExporter {
           const contractName = span.attributes['threadify.contract'] || null;
           const label = span.attributes['threadify.label'] || span.name;
           const serviceName = span.attributes['threadify.service'] || this.connection.serviceName;
+          const role = span.attributes['threadify.role'] || 'participant';
+          
+          // Hybrid Approach: Check if thread exists in the backend using getThreadByRef
+          try {
+            const archivedThread = await this.connection.getThreadByRef({ 
+              refKey: 'otel_trace_id', 
+              refValue: traceId 
+            });
+            
+            if (archivedThread) {
+              this.connection._debugLog(`[ThreadifySpanExporter] Found existing thread ${archivedThread.id} via GraphQL, joining...`);
+              return await this.connection.join(archivedThread.id, role);
+            }
+          } catch (err) {
+            this.connection._debugLog('[ThreadifySpanExporter] Failed to query thread by ref, falling back to start:', err.message);
+          }
           
           return await this.connection.start(label, contractName, { serviceName });
         }
       })();
       
       this.traceThreadMap.set(traceId, threadPromise);
-    }
-    
+      
       // Start cleanup timer to prevent memory leaks (traces are usually short-lived)
       // We remove it from the map after 10 minutes. If a span for this trace arrives after 10 mins,
       // it will simply create a new Thread, which is an acceptable edge case for long-running traces.
       setTimeout(() => {
         this.traceThreadMap.delete(traceId);
       }, 10 * 60 * 1000).unref?.(); // Use unref if in Node.js so it doesn't keep process alive
-      
+    }
+    
     return await this.traceThreadMap.get(traceId);
   }
 
