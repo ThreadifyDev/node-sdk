@@ -145,7 +145,6 @@ export class ThreadifySpanExporter {
 
       // Map Status
       // SpanStatusCode: 0 = UNSET, 1 = OK, 2 = ERROR
-      // In OpenTelemetry, UNSET (0) is the default and implies no error occurred.
       const statusCode = span.status ? span.status.code : 0;
       let targetStatus = 'success';
       let message = span.status ? span.status.message : undefined;
