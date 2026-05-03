@@ -194,9 +194,10 @@ export class Connection {
             this._debugLog('[start] Failed:', data.message);
             reject(new Error(data.message || 'Failed to start thread'));
           }
-        } else {
-          this._debugLog('[start] Ignoring message with action:', data.action);
+          return true;
         }
+        this._debugLog('[start] Ignoring message with action:', data.action);
+        return false;
       };
 
       this._debugLog('[start] Setting up response handler and sending message:', message);
@@ -252,7 +253,9 @@ export class Connection {
           this.isConnected = false;
           this.ws.close(); // Close WebSocket immediately after receiving response
           resolve();
+          return true;
         }
+        return false;
       };
 
       this._onceResponse(responseHandler);
@@ -345,8 +348,10 @@ export class Connection {
       try {
         const message = JSON.parse(data.toString());
         this._debugLog('[_onceResponse] Received message:', message.action, message.status);
-        handler(message);
-        this.ws.off('message', wrapper);
+        const handled = handler(message);
+        if (handled !== false) {
+          this.ws.off('message', wrapper);
+        }
       } catch (e) {
         console.error('Failed to parse WebSocket message:', e);
       }
@@ -741,7 +746,9 @@ export class Connection {
           } else {
             reject(new Error(data.message || 'Failed to join thread'));
           }
+          return true;
         }
+        return false;
       };
 
       this._onceResponse(responseHandler);
@@ -839,8 +846,10 @@ export class ThreadInstance {
     const wrapper = (data) => {
       try {
         const message = JSON.parse(data.toString());
-        handler(message);
-        this.connection.ws.removeListener('message', wrapper);
+        const handled = handler(message);
+        if (handled !== false) {
+          this.connection.ws.removeListener('message', wrapper);
+        }
       } catch (e) {
         console.error('Failed to parse message:', e);
       }
@@ -869,17 +878,21 @@ export class ThreadInstance {
 
     return new Promise((resolve, reject) => {
       this._onceResponse((message) => {
-        if (message.status === 'success') {
-          resolve({
-            token: message.threadToken,
-            threadId: this.threadId,
-            role: message.role,
-            accessLevel: message.accessLevel,
-            expiresAt: message.expiresAt
-          });
-        } else {
-          reject(new Error(message.message || 'Failed to create invitation token'));
+        if (message.action === 'inviteParty' || message.threadToken) {
+          if (message.status === 'success') {
+            resolve({
+              token: message.threadToken,
+              threadId: this.threadId,
+              role: message.role,
+              accessLevel: message.accessLevel,
+              expiresAt: message.expiresAt
+            });
+          } else {
+            reject(new Error(message.message || 'Failed to create invitation token'));
+          }
+          return true;
         }
+        return false;
       });
 
       this._send({
@@ -941,7 +954,9 @@ export class ThreadInstance {
           } else {
             reject(new Error(message.message || 'Failed to add refs'));
           }
+          return true;
         }
+        return false;
       });
 
       this._send({
@@ -1019,7 +1034,9 @@ export class ThreadInstance {
           } else {
             reject(new Error(message.message || 'Failed to end thread'));
           }
+          return true;
         }
+        return false;
       });
 
       // Prepare end data

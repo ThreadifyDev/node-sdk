@@ -230,6 +230,9 @@ export class ThreadStep {
       // Set up one-time listener for response
       const responseHandler = (data) => {
         if (data.action === 'recordThreadEvent') {
+          // If server includes stepName, verify it matches
+          if (data.stepName && data.stepName !== this.stepName) return false;
+          
           if (data.status === 'success') {
             resolve(data);
           } else {
@@ -238,7 +241,9 @@ export class ThreadStep {
             error.isDuplicate = data.isDuplicate || false;
             reject(error);
           }
+          return true;
         }
+        return false;
       };
 
       this.thread._onceResponse(responseHandler);

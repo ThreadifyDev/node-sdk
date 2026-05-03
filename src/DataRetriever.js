@@ -449,21 +449,23 @@ export class DataRetriever {
    */
   async getThreadByRef({ refKey, refValue }) {
     const query = `
-      query GetThreadByRef($refKey: String!, $refValue: String!) {
+      query GetThreadByRef($refKey: String, $refValue: String!) {
         threadsByRef(refKey: $refKey, refValue: $refValue) {
-          ${THREAD_FIELDS}
+          threads {
+            ${THREAD_FIELDS}
+          }
         }
       }
     `;
 
     const data = await this.graphqlClient.query(query, { refKey, refValue });
     
-    if (!data.threadsByRef || data.threadsByRef.length === 0) {
+    if (!data.threadsByRef || !data.threadsByRef.threads || data.threadsByRef.threads.length === 0) {
       return null;
     }
 
     // Return first match (could be extended to return all matches)
-    return new ArchivedThread(data.threadsByRef[0], this.graphqlClient);
+    return new ArchivedThread(data.threadsByRef.threads[0], this.graphqlClient);
   }
 
   /**
@@ -481,7 +483,7 @@ export class DataRetriever {
   async getThreadsByRef({ refKey, refValue, status, startedAfter, startedBefore, limit, offset }) {
     const query = `
       query GetThreadsByRef(
-        $refKey: String!
+        $refKey: String
         $refValue: String!
         $status: String
         $startedAfter: String
@@ -498,7 +500,9 @@ export class DataRetriever {
           limit: $limit
           offset: $offset
         ) {
-          ${THREAD_FIELDS}
+          threads {
+            ${THREAD_FIELDS}
+          }
         }
       }
     `;
@@ -515,11 +519,11 @@ export class DataRetriever {
 
     const data = await this.graphqlClient.query(query, variables);
     
-    if (!data.threadsByRef) {
+    if (!data.threadsByRef || !data.threadsByRef.threads) {
       return [];
     }
 
-    return data.threadsByRef.map(threadData => 
+    return data.threadsByRef.threads.map(threadData => 
       new ArchivedThread(threadData, this.graphqlClient)
     );
   }
