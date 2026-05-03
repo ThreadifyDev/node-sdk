@@ -162,7 +162,8 @@ export class ThreadifySpanExporter {
       // Root Span Auto-Complete
       // If this span has no parent, it is the Root Span. When it ends, the trace is done.
       // We automatically end the Threadify thread based on the root span's status.
-      if (!span.parentSpanId) {
+      const parentSpanId = span.parentSpanId || (span.parentSpanContext ? span.parentSpanContext().spanId : null);
+      if (!parentSpanId) {
         if (targetStatus === 'success') {
           await thread.complete('Root span completed successfully');
         } else {
