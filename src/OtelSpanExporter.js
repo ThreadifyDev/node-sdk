@@ -7,7 +7,7 @@ export class ThreadifySpanExporter {
    * Initialize the Threadify Span Exporter
    * @param {import('./Thread.js').Connection} connection - An established Threadify Connection
    * @param {Object} options - Configuration options
-   * @param {string[]} [options.refs=[]] - Array of attribute keys to extract into Threadify refs
+   * @param {(string[]|Object)} [options.refs=[]] - Array of attribute keys or object mapping {attributeKey: refKey}
    */
   constructor(connection, options = {}) {
     if (!connection) {
@@ -18,6 +18,17 @@ export class ThreadifySpanExporter {
       refs: [],
       ...options
     };
+    
+    // Normalize refs to object format for easier lookup
+    if (Array.isArray(this.options.refs)) {
+      const refMap = {};
+      this.options.refs.forEach(key => {
+        refMap[key] = key;
+      });
+      this.options.refsMap = refMap;
+    } else {
+      this.options.refsMap = this.options.refs || {};
+    }
     
     // Map of traceId -> Promise<ThreadInstance>
     // Used to ensure we only create one ThreadInstance per trace
@@ -105,8 +116,8 @@ export class ThreadifySpanExporter {
           continue;
         }
 
-        if (this.options.refs.includes(key) || key.startsWith('threadify.ref.')) {
-          const refKey = key.startsWith('threadify.ref.') ? key.replace('threadify.ref.', '') : key;
+        if (this.options.refsMap[key] || key.startsWith('threadify.ref.')) {
+          const refKey = key.startsWith('threadify.ref.') ? key.replace('threadify.ref.', '') : this.options.refsMap[key];
           refs[refKey] = value;
         } else if (key.startsWith('threadify.context.')) {
           context[key.replace('threadify.context.', '')] = value;
