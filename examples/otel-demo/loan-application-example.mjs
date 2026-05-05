@@ -25,7 +25,7 @@ async function main() {
   let connection;
   try {
     connection = await Threadify.connect(API_KEY, 'api-gateway', {
-      wsUrl: process.env.THREADIFY_WS_URL || 'ws://localhost:8081/threads',
+      // wsUrl: process.env.THREADIFY_WS_URL || 'ws://localhost:8081/threads',
     });
     console.log('✅ Connected successfully!');
   } catch (err) {
