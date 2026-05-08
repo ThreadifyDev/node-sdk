@@ -29,6 +29,13 @@ import { ThreadifySpanExporter } from './OtelSpanExporter.js';
  * });
  */
 export class Threadify {
+  /** Access level enum: external parties (default for inviteParty) */
+  static get FOR_EXTERNAL() { return 'external'; }
+  /** Access level enum: read-only observer */
+  static get FOR_OBSERVER() { return 'observer'; }
+  /** Access level enum: active participant */
+  static get FOR_PARTICIPANT() { return 'participant'; }
+
   /**
    * Connect to Threadify Engine
    * @param {string} apiKey - Your API key

@@ -204,7 +204,7 @@ await thread.step('shipment_created')
 // Creating an invitation token (if you're the thread owner):
 const invitationToken = await thread.inviteParty({
   role: 'logistics',
-  permissions: 'read,write',
+  accessLevel: Threadify.FOR_EXTERNAL,  // default; use FOR_OBSERVER or FOR_PARTICIPANT if needed
   expiresIn: '48h'
 });
 // Share this token with external partner

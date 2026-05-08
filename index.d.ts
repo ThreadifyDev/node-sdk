@@ -287,8 +287,8 @@ export class ThreadStep {
 export interface InvitePartyOptions {
   /** Role for the invited user */
   role: string;
-  /** Permissions (comma-separated: 'read', 'write', 'execute') */
-  permissions?: string;
+  /** Access level for the invited user. Use Threadify.FOR_EXTERNAL (default), Threadify.FOR_OBSERVER, or Threadify.FOR_PARTICIPANT */
+  accessLevel?: 'external' | 'observer' | 'participant';
   /** Token expiration (e.g., '24h', '7d', '30d') */
   expiresIn?: string;
 }
@@ -300,8 +300,8 @@ export interface InvitePartyResponse {
   threadId: string;
   /** Role assigned to invited user */
   role: string;
-  /** Permissions granted */
-  permissions: string;
+  /** Access level granted */
+  accessLevel: 'external' | 'observer' | 'participant' | 'owner';
   /** Token expiration timestamp */
   expiresAt: string;
 }
@@ -311,10 +311,10 @@ export class ThreadInstance {
   readonly threadId: string;
   /** Contract ID */
   readonly contractId: string;
-  /** User's role in this thread */
+  /** User's business role in this thread */
   readonly role?: string;
-  /** User's permissions in this thread */
-  readonly permissions?: string;
+  /** User's runtime access level in this thread (external/observer/participant/owner) */
+  readonly accessLevel?: 'external' | 'observer' | 'participant' | 'owner';
 
   /**
    * Create a new step in this thread
@@ -411,6 +411,9 @@ export class Connection {
    * @param tokenOrThreadId - Thread token or thread ID
    * @param role - Role for the thread (required if using thread ID)
    * @returns Promise resolving to ThreadInstance
+   * @remarks
+   * - Token join: accessLevel is read from the invitation token (set via inviteParty)
+   * - Direct join (threadId): accessLevel defaults to participant
    */
   join(tokenOrThreadId: string, role?: string): Promise<ThreadInstance>;
 
@@ -514,6 +517,13 @@ export class ThreadifySpanExporter {
 }
 
 export class Threadify {
+  /** Access level enum: external parties (default for inviteParty) */
+  static readonly FOR_EXTERNAL: 'external';
+  /** Access level enum: read-only observer */
+  static readonly FOR_OBSERVER: 'observer';
+  /** Access level enum: active participant */
+  static readonly FOR_PARTICIPANT: 'participant';
+
   /**
    * Connect to Threadify Engine
    * @param apiKey - Your API key

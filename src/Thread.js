@@ -112,8 +112,10 @@ export class Connection {
    * @param {...any} args - Variable arguments:
    *   - start() - Non-contract workflow
    *   - start(label) - Non-contract with label
+   *   - start(label, { serviceName, refs }) - Non-contract with options
    *   - start(label, contractName) - Contract workflow
    *   - start(label, contractName, { serviceName, refs }) - Contract with options
+   *   - start(label, null, { serviceName, refs }) - Non-contract with options (explicit)
    * @returns {Promise<ThreadInstance>} - Returns a ThreadInstance for fluent API
    */
   async start(...args) {
@@ -131,16 +133,24 @@ export class Connection {
       // start(label) -> non-contract with label
       options = { label: args[0] };
     } else if (args.length === 2) {
-      // start(label, contractName) -> contract
-      options = { label: args[0] };
-      contractName = args[1];
+      if (typeof args[1] === 'object' && args[1] !== null) {
+        // start(label, { serviceName, refs }) -> non-contract with options
+        options = { label: args[0], ...args[1] };
+        serviceName = args[1].serviceName || null;
+      } else if (typeof args[1] === 'string') {
+        // start(label, contractName) -> contract
+        options = { label: args[0] };
+        contractName = args[1];
+      } else {
+        throw new Error('Second argument must be a contract name (string) or options (object)');
+      }
     } else if (args.length === 3) {
-      // start(label, contractName, { serviceName, refs })
+      // start(label, contractName|null, { serviceName, refs })
       options = { label: args[0], ...args[2] };
-      contractName = args[1];
+      contractName = args[1] || null;
       serviceName = args[2] ? args[2].serviceName : null;
     } else {
-      throw new Error('Invalid arguments. Use start(), start(label), start(label, contractName), or start(label, contractName, options)');
+      throw new Error('Invalid arguments. Use start(), start(label), start(label, options), start(label, contractName), or start(label, contractName, options)');
     }
 
     // Validate parameters
@@ -185,7 +195,7 @@ export class Connection {
         this._debugLog('[start] Response handler called with:', data.action, data.status);
         if (data.action === 'startThread') {
           if (data.status === 'success') {
-            const threadInstance = new ThreadInstance(this, data.threadId, contractName, null, {});
+            const threadInstance = new ThreadInstance(this, data.threadId, contractName, null, null, {});
             // Register thread for notification routing
             this.threads.set(data.threadId, threadInstance);
             this._debugLog(`Thread started: ${data.threadId}`);
@@ -712,6 +722,13 @@ export class Connection {
    * @param {string} tokenOrThreadId - JWT invitation token OR threadId for direct join
    * @param {string} role - Role for direct join (internal services only)
    * @returns {Promise<ThreadInstance>} - Returns a new ThreadInstance for the joined thread
+   * @example
+   * // Join via token (accessLevel comes from the invite, e.g. FOR_OBSERVER)
+   * const thread = await connection.join(token);
+   *
+   * // Direct join (defaults to participant accessLevel)
+   * const thread = await connection.join(threadId);
+   * const thread = await connection.join(threadId, 'supplier');
    */
   async join(tokenOrThreadId, role = null) {
     if (!tokenOrThreadId) {
@@ -722,8 +739,9 @@ export class Connection {
     }
 
     // Determine if this is token-based or direct join
-    const isTokenJoin = !role && typeof tokenOrThreadId === 'string' && tokenOrThreadId.length > 50;
-    const isDirectJoin = role && typeof tokenOrThreadId === 'string';
+    // Tokens (JWTs) have 3 dot-separated parts or are long opaque strings.
+    const isTokenJoin = !role && typeof tokenOrThreadId === 'string' && (tokenOrThreadId.split('.').length === 3 || tokenOrThreadId.length > 50);
+    const isDirectJoin = typeof tokenOrThreadId === 'string';
 
     return new Promise((resolve, reject) => {
       // Set up one-time listener for join response
@@ -739,6 +757,7 @@ export class Connection {
               data.threadId,
               data.contractId,
               data.role,
+              data.accessLevel,
               null // refs
             );
 
@@ -762,14 +781,14 @@ export class Connection {
           threadToken: tokenOrThreadId
         });
       } else if (isDirectJoin) {
-        this._debugLog(`Joining thread directly: ${tokenOrThreadId} as ${role}`);
+        this._debugLog(`Joining thread directly: ${tokenOrThreadId}${role ? ' as ' + role : ''}`);
         this._send({
           action: 'joinThread',
           threadId: tokenOrThreadId,
-          role: role
+          role: role || undefined
         });
       } else {
-        reject(new Error('Invalid join parameters. Use either token or (threadId, role)'));
+        reject(new Error('Invalid join parameters. Use join(token), join(threadId), or join(threadId, role)'));
       }
 
       // Timeout after 10 seconds
@@ -784,12 +803,13 @@ export class Connection {
  * ThreadInstance - Represents a specific thread with its own context
  */
 export class ThreadInstance {
-  constructor(connection, threadId, contractId, role, refs) {
+  constructor(connection, threadId, contractId, role, accessLevel, refs) {
     this.connection = connection;
     this.threadId = threadId;
     this.id = threadId; // Alias for backward compatibility
     this.contractId = contractId;
     this.role = role;
+    this.accessLevel = accessLevel;
     this.refs = refs;
     this.steps = new Map();
     this.pendingWaits = new Map(); // stepName -> { resolve, reject, timeoutId, statuses }
@@ -861,9 +881,18 @@ export class ThreadInstance {
    * Create an invitation token for this thread
    * @param {Object} options - Invitation options
    * @param {string} options.role - Required business/contract role (e.g., "supplier", "merchant")
-   * @param {string} [options.accessLevel="external"] - Optional access level (owner/participant/observer/external)
+   * @param {string} [options.accessLevel=Threadify.FOR_EXTERNAL] - Optional access level. Use Threadify.FOR_EXTERNAL (default), Threadify.FOR_OBSERVER, or Threadify.FOR_PARTICIPANT.
    * @param {string} [options.expiresIn="24h"] - Optional expiry duration
    * @returns {Promise<Object>} - Invitation response with token and metadata
+   * @example
+   * // Invite external supplier with read-only access
+   * const invite = await thread.inviteParty({
+   *   role: 'supplier',
+   *   accessLevel: Threadify.FOR_OBSERVER
+   * });
+   *
+   * // Invite as external (default)
+   * const invite = await thread.inviteParty({ role: 'supplier' });
    */
   async inviteParty(options = {}) {
     const {
