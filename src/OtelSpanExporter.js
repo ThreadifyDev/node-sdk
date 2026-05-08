@@ -8,6 +8,7 @@ export class ThreadifySpanExporter {
    * @param {import('./Thread.js').Connection} connection - An established Threadify Connection
    * @param {Object} options - Configuration options
    * @param {(string[]|Object)} [options.refs=[]] - Array of attribute keys or object mapping {attributeKey: refKey}
+   * @param {string[]} [options.filters=[]] - Span-name patterns to drop. Trailing * is a wildcard prefix match; otherwise exact match. Example: ["invoke_llm", "adk.before*", "llm.*"]
    */
   constructor(connection, options = {}) {
     if (!connection) {
@@ -16,6 +17,7 @@ export class ThreadifySpanExporter {
     this.connection = connection;
     this.options = {
       refs: [],
+      filters: [],
       ...options
     };
     
@@ -30,9 +32,35 @@ export class ThreadifySpanExporter {
       this.options.refsMap = this.options.refs || {};
     }
     
+    // Span-name filters; e.g. ["invoke_llm", "adk.before*", "llm.*"]
+    this.filters = this.options.filters || [];
+
     // Map of traceId -> Promise<ThreadInstance>
     // Used to ensure we only create one ThreadInstance per trace
     this.traceThreadMap = new Map();
+  }
+
+  /**
+   * Check whether a span name matches any configured drop filter.
+   * @private
+   * @param {string} name - The span name to test
+   * @returns {boolean} - True if the span should be dropped
+   */
+  _shouldDrop(name) {
+    for (const filter of this.filters) {
+      if (!filter) continue;
+      if (filter.endsWith('*')) {
+        const prefix = filter.slice(0, -1);
+        if (name.startsWith(prefix)) {
+          return true;
+        }
+        continue;
+      }
+      if (name === filter) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /**
@@ -201,7 +229,8 @@ export class ThreadifySpanExporter {
       return;
     }
 
-    Promise.all(spans.map(span => this._processSpan(span)))
+    const filtered = spans.filter(span => !this._shouldDrop(span.name));
+    Promise.all(filtered.map(span => this._processSpan(span)))
       .then(() => {
         resultCallback({ code: 0 }); // ExportResultCode.SUCCESS
       })

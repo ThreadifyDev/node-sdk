@@ -633,6 +633,52 @@ connection.onViolation('order_placed', async (notification) => {
 
 ---
 
+## OpenTelemetry Exporter
+
+Threadify provides an OpenTelemetry SpanExporter that automatically sends OTel spans to Threadify as steps.
+
+### Setup
+
+```javascript
+import { trace } from '@opentelemetry/api';
+import { BasicTracerProvider, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
+import { Threadify } from '@threadify/sdk';
+
+const connection = await Threadify.connect('api-key', 'checkout-service');
+
+// Create exporter
+const exporter = connection.createSpanExporter({ refs: ['order.id'] });
+
+// Register with OTel
+const provider = new BasicTracerProvider();
+provider.addSpanProcessor(new SimpleSpanProcessor(exporter));
+trace.setGlobalTracerProvider(provider);
+```
+
+### Options
+
+- **`refs`** (string[]): OTel attribute keys to extract as Threadify refs
+- **`filters`** (string[]): Span names to drop. Supports exact match or prefix wildcard with `*`
+
+### Filtering Spans
+
+Use `filters` to prevent noisy spans from being exported:
+
+```javascript
+const exporter = connection.createSpanExporter({
+  refs: ['order.id'],
+  filters: ['invoke_llm', 'adk.before*', 'llm.*']
+});
+```
+
+**Filter patterns:**
+
+- `"invoke_llm"` — exact match, drops spans named exactly `invoke_llm`
+- `"adk.before*"` — prefix wildcard, drops any span starting with `adk.before`
+- `"llm.*"` — prefix wildcard, drops any span starting with `llm.`
+
+---
+
 ## Support
 
 For issues, questions, or contributions:

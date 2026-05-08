@@ -28,7 +28,10 @@ class MockConnection extends Connection {
 
 async function test() {
   const connection = new MockConnection();
-  const exporter = new ThreadifySpanExporter(connection, { refs: ['rider.id'] });
+  const exporter = new ThreadifySpanExporter(connection, {
+    refs: ['rider.id'],
+    filters: ['invoke_llm', 'adk.before*', 'llm.*']
+  });
   
   const provider = new BasicTracerProvider();
   provider.addSpanProcessor(new SimpleSpanProcessor(exporter));
