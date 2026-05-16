@@ -160,7 +160,7 @@ export class ThreadifySpanExporter {
       }
       
       if (Object.keys(context).length > 0) step.addContext(context);
-      if (Object.keys(refs).length > 0) step.addRefs(refs);
+      if (Object.keys(refs).length > 0) thread.addRefs(refs);
 
       // Map Timing
       if (span.startTime) {
@@ -206,7 +206,7 @@ export class ThreadifySpanExporter {
       // Root Span Auto-Complete
       // If this span has no parent, it is the Root Span. When it ends, the trace is done.
       // We automatically end the Threadify thread based on the root span's status.
-      const parentSpanId = span.parentSpanId || (span.parentSpanContext ? span.parentSpanContext().spanId : null);
+      const parentSpanId = span.parentSpanId || span.parentSpanContext?.spanId || null;
       if (!parentSpanId) {
         if (targetStatus === 'success') {
           await thread.complete('Root span completed successfully');

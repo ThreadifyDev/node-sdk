@@ -32,7 +32,7 @@ async function main() {
   let connection;
   try {
     connection = await Threadify.connect(API_KEY, 'user-journey-orchestrator', {
-      wsUrl: 'ws://localhost:8081/threads'
+      wsUrl: 'ws://localhost:8081/threads', debug: true
     });
     console.log('✅ Connected successfully!');
   } catch (err) {
