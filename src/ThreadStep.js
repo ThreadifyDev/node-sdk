@@ -22,7 +22,6 @@ export class ThreadStep {
       startedAt: new Date().toISOString(),
       finishedAt: null,
       context: {},
-      refs: {}, // Use addRefs() to populate
       status: 'in_progress',
       serviceName: serviceName
     };
@@ -63,26 +62,6 @@ export class ThreadStep {
     
     // Convert to hex string
     return (hash >>> 0).toString(16).padStart(8, '0');
-  }
-
-  /**
-   * Add references to external systems
-   * @param {Object} refsData - Key-value pairs of external system references
-   * @returns {ThreadStep} - Returns this for method chaining
-   */
-  addRefs(refsData) {
-    if (typeof refsData !== 'object' || refsData === null) {
-      throw new Error('Refs data must be an object');
-    }
-    
-    // Convert all values to strings as expected by server schema
-    const stringifiedRefs = {};
-    for (const [key, value] of Object.entries(refsData)) {
-      stringifiedRefs[key] = String(value);
-    }
-    
-    this.event.refs = { ...this.event.refs, ...stringifiedRefs };
-    return this;
   }
 
   /**

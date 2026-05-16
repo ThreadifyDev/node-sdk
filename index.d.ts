@@ -208,13 +208,6 @@ export class ThreadStep {
   idempotencyKey(key: string): ThreadStep;
 
   /**
-   * Add external references
-   * @param refs - Reference key-value pairs
-   * @returns This ThreadStep instance for chaining
-   */
-  addRefs(refs: ThreadRefs): ThreadStep;
-
-  /**
    * Add context data to this step
    * @param contextData - Key-value pairs to add to step context
    * @param isPrivate - Whether this context is private
@@ -323,6 +316,21 @@ export class ThreadInstance {
    * @returns New ThreadStep instance
    */
   step(stepName: string, options?: ThreadOptions): ThreadStep;
+
+  /**
+   * Add external references to this thread
+   * @param refs - Reference key-value pairs
+   * @returns Promise resolving to the updated thread
+   */
+  addRefs(refs: ThreadRefs): Promise<ThreadInstance>;
+
+  /**
+   * Link another thread to this one
+   * @param threadId - Thread ID to link
+   * @param relationship - Relationship type (e.g., 'parent', 'child')
+   * @returns Promise resolving to the updated thread
+   */
+  linkThread(threadId: string, relationship: string): Promise<ThreadInstance>;
 
   /**
    * Invite another user to join this thread
