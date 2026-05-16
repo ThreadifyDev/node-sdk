@@ -26,12 +26,14 @@ for (let i = 0; i < args.length; i++) {
 const customerId = `CUST-${Math.floor(Math.random() * 10000)}`;
 
 async function main() {
-  const API_KEY = process.env.THREADIFY_API_KEY || 'your-api-key-here';
+  const API_KEY = process.env.THREADIFY_LOCAL_API_KEY || 'your-api-key-here';
   
   console.log('🔗 Connecting to Threadify...');
   let connection;
   try {
-    connection = await Threadify.connect(API_KEY, 'user-journey-orchestrator');
+    connection = await Threadify.connect(API_KEY, 'user-journey-orchestrator', {
+      wsUrl: 'ws://localhost:8081/threads'
+    });
     console.log('✅ Connected successfully!');
   } catch (err) {
     console.error('❌ Failed to connect to Threadify:', err.message);
@@ -64,10 +66,11 @@ async function main() {
   try {
     // 1. Onboarding
     const onboardingTracer = trace.getTracer('onboarding-tracer');
-    const onboardingSuccess = await runOnboardingFlow(onboardingTracer, { 
-      customerName, 
+    const onboardingSuccess = await runOnboardingFlow(onboardingTracer, {
+      customerName,
       customerId,
-      simulateFailure: false 
+      simulateFailure: false,
+      tags: ['onboarding', 'kyc', 'compliance']
     });
 
       if (!onboardingSuccess) {
@@ -84,7 +87,8 @@ async function main() {
         currency: 'USD',
         paymentPartner,
         customerId,
-        simulateFailure: false
+        simulateFailure: false,
+        tags: ['payment', 'setup-fee', paymentPartner]
       });
 
       if (!paymentSuccess) {
@@ -100,7 +104,8 @@ async function main() {
         customerId,
         planName: 'Enterprise',
         paymentMethod: paymentPartner === 'stripe' ? 'credit_card' : 'bank_transfer',
-        simulateDunning: true 
+        simulateDunning: true,
+        tags: ['subscription', 'billing', 'recurring']
       });
 
       console.log('\n--- Transitioning to Scheduled Tasks (Fast Forward 1 Year) ---\n');
@@ -110,7 +115,8 @@ async function main() {
     await runKycRefreshFlow(complianceTracer, {
       customerId,
       partner: 'jumio',
-      simulateSilentFailure: true // Shows how it fails gracefully without breaking the main state
+      simulateSilentFailure: true,
+      tags: ['compliance', 'kyc-refresh', 'periodic']
     });
 
   } catch (err) {

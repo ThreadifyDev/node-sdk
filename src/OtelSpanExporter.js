@@ -101,7 +101,12 @@ export class ThreadifySpanExporter {
             this.connection._debugLog('[ThreadifySpanExporter] Failed to query thread by ref, falling back to start:', err.message);
           }
           
-          return await this.connection.start(label, contractName, { serviceName });
+          const tags = span.attributes['threadify.tags'];
+          const startOpts = { serviceName };
+          if (tags) {
+            startOpts.tags = Array.isArray(tags) ? tags : [tags];
+          }
+          return await this.connection.start(label, contractName, startOpts);
         }
       })();
       
@@ -140,7 +145,7 @@ export class ThreadifySpanExporter {
       // Map attributes
       for (const [key, value] of Object.entries(span.attributes)) {
         // Skip internal threadify directives
-        if (['threadify.thread_id', 'threadify.contract', 'threadify.label', 'threadify.step_name', 'threadify.role', 'threadify.service'].includes(key)) {
+        if (['threadify.thread_id', 'threadify.contract', 'threadify.label', 'threadify.step_name', 'threadify.role', 'threadify.service', 'threadify.tags'].includes(key)) {
           continue;
         }
 

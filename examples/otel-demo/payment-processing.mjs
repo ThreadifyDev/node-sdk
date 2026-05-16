@@ -6,13 +6,16 @@ import { fileURLToPath } from 'url';
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-export async function runPaymentProcessingFlow(tracer, { amount, currency = 'USD', paymentPartner = 'stripe', simulateFailure = false, customerId }) {
+export async function runPaymentProcessingFlow(tracer, { amount, currency = 'USD', paymentPartner = 'stripe', simulateFailure = false, customerId, tags }) {
   console.log(`🚀 Starting Payment Processing Flow for ${amount} ${currency} via ${paymentPartner}...`);
   const rootSpan = tracer.startSpan('process_payment');
-  
+
   rootSpan.setAttribute('threadify.contract', 'payment_processing_workflow');
   rootSpan.setAttribute('threadify.label', `Payment: ${customerId}`);
   rootSpan.setAttribute('threadify.service', 'payment-gateway');
+  if (tags) {
+    rootSpan.setAttribute('threadify.tags', tags);
+  }
   
   const paymentId = `PAY-${Date.now()}`;
   rootSpan.setAttribute('payment.id', paymentId);

@@ -163,6 +163,11 @@ export class Connection {
     if (options && typeof options !== 'object') {
       throw new Error('Options must be an object');
     }
+    if (options && options.tags !== undefined) {
+      if (!Array.isArray(options.tags) || options.tags.some(t => typeof t !== 'string' || !t.trim())) {
+        throw new Error('options.tags must be an array of non-empty strings');
+      }
+    }
 
     return new Promise((resolve, reject) => {
       const message = {
@@ -183,6 +188,11 @@ export class Connection {
         Object.assign(message.refs, options.refs);
       }
 
+      // Add tags if provided
+      if (options && Array.isArray(options.tags) && options.tags.length > 0) {
+        message.tags = options.tags;
+      }
+
       // Only include role for contract-based workflows
       if (contractName) {
         // Extract role from service name (e.g., "merchant-service" -> "merchant")
@@ -196,6 +206,7 @@ export class Connection {
         if (data.action === 'startThread') {
           if (data.status === 'success') {
             const threadInstance = new ThreadInstance(this, data.threadId, contractName, null, null, {});
+            threadInstance.tags = (options && Array.isArray(options.tags)) ? [...options.tags] : [];
             // Register thread for notification routing
             this.threads.set(data.threadId, threadInstance);
             this._debugLog(`Thread started: ${data.threadId}`);
@@ -811,6 +822,7 @@ export class ThreadInstance {
     this.role = role;
     this.accessLevel = accessLevel;
     this.refs = refs;
+    this.tags = []; // Tags applied at thread creation (immutable)
     this.steps = new Map();
     this.pendingWaits = new Map(); // stepName -> { resolve, reject, timeoutId, statuses }
   }

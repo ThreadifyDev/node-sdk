@@ -6,13 +6,16 @@ import { fileURLToPath } from 'url';
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-export async function runSubscriptionFlow(tracer, { customerId, planName = 'Pro', paymentMethod = 'card', simulateDunning = false }) {
+export async function runSubscriptionFlow(tracer, { customerId, planName = 'Pro', paymentMethod = 'card', simulateDunning = false, tags }) {
   console.log(`🚀 Starting Subscription Flow for ${customerId} on ${planName} plan...`);
   const rootSpan = tracer.startSpan('manage_subscription');
-  
+
   rootSpan.setAttribute('threadify.contract', 'subscription_lifecycle_workflow');
   rootSpan.setAttribute('threadify.label', `Subscription: ${customerId}`);
   rootSpan.setAttribute('threadify.service', 'billing-service');
+  if (tags) {
+    rootSpan.setAttribute('threadify.tags', tags);
+  }
   
   const subscriptionId = `SUB-${Date.now()}`;
   rootSpan.setAttribute('subscription.id', subscriptionId);

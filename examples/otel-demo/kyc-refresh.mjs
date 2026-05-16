@@ -6,13 +6,16 @@ import { fileURLToPath } from 'url';
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-export async function runKycRefreshFlow(tracer, { customerId, partner = 'jumio', simulateSilentFailure = false }) {
+export async function runKycRefreshFlow(tracer, { customerId, partner = 'jumio', simulateSilentFailure = false, tags }) {
   console.log(`🚀 Starting Scheduled KYC Refresh for ${customerId}...`);
   const rootSpan = tracer.startSpan('kyc_periodic_refresh');
-  
+
   rootSpan.setAttribute('threadify.contract', 'kyc_refresh_workflow');
   rootSpan.setAttribute('threadify.label', `KYC Refresh: ${customerId}`);
   rootSpan.setAttribute('threadify.service', 'compliance-scheduler');
+  if (tags) {
+    rootSpan.setAttribute('threadify.tags', tags);
+  }
   
   const refreshId = `REFRESH-${Date.now()}`;
   rootSpan.setAttribute('refresh.id', refreshId);

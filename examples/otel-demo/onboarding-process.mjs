@@ -6,13 +6,16 @@ import { fileURLToPath } from 'url';
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-export async function runOnboardingFlow(tracer, { customerName, customerId, simulateFailure = false }) {
+export async function runOnboardingFlow(tracer, { customerName, customerId, simulateFailure = false, tags }) {
   console.log(`🚀 Starting Onboarding Flow for ${customerName}...`);
   const rootSpan = tracer.startSpan('user_onboarding');
-  
+
   rootSpan.setAttribute('threadify.contract', 'onboarding_workflow');
   rootSpan.setAttribute('threadify.label', `Onboarding: ${customerName}`);
   rootSpan.setAttribute('threadify.service', 'onboarding-service');
+  if (tags) {
+    rootSpan.setAttribute('threadify.tags', tags);
+  }
   
   rootSpan.setAttribute('customer.id', customerId);
   rootSpan.setAttribute('customer.name', customerName);
