@@ -1,6 +1,6 @@
 {
   "name": "@threadify/sdk",
-  "version": "0.1.22",
+  "version": "0.1.23",
   "description": "JavaScript SDK for Threadify - Execute business process graphs with context—track what happened, validate every step, and trigger context-aware actions",
   "main": "dist/index.cjs",
   "module": "src/index.js",
@@ -35,6 +35,7 @@
   "author": "Threadify Team",
   "license": "MIT",
   "dependencies": {
+    "@opentelemetry/api": "^1.7.0",
     "ws": "^8.14.2"
   },
   "engines": {

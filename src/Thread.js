@@ -27,8 +27,11 @@ export class Connection {
     this.maxProcessedSize = 10000; // Prevent memory leak
     this._dataRetriever = null; // Lazy-initialized DataRetriever
     this._activeSubscriptions = new Map(); // Track active subscriptions for merging
+    this._pendingResponseHandlers = []; // FIFO queue for response handlers
+    this._heartbeatInterval = null;
 
     this._setupNotificationListener();
+    this._startHeartbeat();
   }
 
   /**
@@ -362,23 +365,12 @@ export class Connection {
 
   /**
    * Internal method to set up one-time response handler
+   * Uses a centralized FIFO dispatcher to prevent race conditions
+   * when multiple requests are in flight.
    * @private
    */
   _onceResponse(handler) {
-    const wrapper = (data) => {
-      try {
-        const message = JSON.parse(data.toString());
-        this._debugLog('[_onceResponse] Received message:', message.action, message.status);
-        const handled = handler(message);
-        if (handled !== false) {
-          this.ws.off('message', wrapper);
-        }
-      } catch (e) {
-        console.error('Failed to parse WebSocket message:', e);
-      }
-    };
-    this.ws.on('message', wrapper);
-    this._debugLog('[_onceResponse] Handler registered, waiting for response...');
+    this._pendingResponseHandlers.push(handler);
   }
 
   /**
@@ -542,6 +534,8 @@ export class Connection {
 
   /**
    * Setup notification listener for WebSocket messages
+   * Centralized dispatcher: routes responses FIFO to pending handlers,
+   * then falls through to notification handling.
    * @private
    */
   _setupNotificationListener() {
@@ -549,16 +543,36 @@ export class Connection {
       try {
         const message = JSON.parse(data.toString());
 
-        // Handle single notification (push-based with ackToken)
-        if (message.action === 'notification') {
-          this._handleNotification(message.notification, message.ackToken);
+        // First: dispatch to pending response handlers (FIFO)
+        let consumed = false;
+        for (let i = 0; i < this._pendingResponseHandlers.length; i++) {
+          try {
+            const handled = this._pendingResponseHandlers[i](message);
+            if (handled !== false) {
+              this._pendingResponseHandlers.splice(i, 1);
+              consumed = true;
+              break;
+            }
+          } catch (e) {
+            console.error('[Connection] Response handler error:', e);
+            this._pendingResponseHandlers.splice(i, 1);
+            i--;
+          }
         }
 
-        // Handle notification batch
-        if (message.action === 'notification_batch') {
-          message.notifications.forEach(notif => {
-            this._handleNotification(notif);
-          });
+        // If no response handler consumed it, handle notifications
+        if (!consumed) {
+          // Handle single notification (push-based with ackToken)
+          if (message.action === 'notification') {
+            this._handleNotification(message.notification, message.ackToken);
+          }
+
+          // Handle notification batch
+          if (message.action === 'notification_batch') {
+            message.notifications.forEach(notif => {
+              this._handleNotification(notif);
+            });
+          }
         }
       } catch (e) {
         // Ignore parse errors for non-JSON messages
@@ -569,6 +583,7 @@ export class Connection {
     this.ws.on('close', () => {
       this._debugLog('[Thread] WebSocket closed');
       this.isConnected = false;
+      this._stopHeartbeat();
     });
 
     this.ws.on('error', (error) => {
@@ -596,6 +611,32 @@ export class Connection {
         reject(new Error('Not connected'));
       }
     });
+  }
+
+  /**
+   * Start client-driven heartbeat to keep connection alive
+   * Sends {action: "heartbeat"} every 30s so the server's
+   * SetReadDeadline doesn't close idle connections.
+   * @private
+   */
+  _startHeartbeat() {
+    this._stopHeartbeat();
+    this._heartbeatInterval = setInterval(() => {
+      if (this.ws.readyState === 1) {
+        this._send({ action: 'heartbeat' });
+      }
+    }, 30000);
+  }
+
+  /**
+   * Stop the heartbeat interval
+   * @private
+   */
+  _stopHeartbeat() {
+    if (this._heartbeatInterval) {
+      clearInterval(this._heartbeatInterval);
+      this._heartbeatInterval = null;
+    }
   }
 
   /**
@@ -872,21 +913,11 @@ export class ThreadInstance {
 
   /**
    * Register a one-time response handler
+   * Delegates to Connection's centralized FIFO dispatcher.
    * @param {Function} handler - Response handler function
    */
   _onceResponse(handler) {
-    const wrapper = (data) => {
-      try {
-        const message = JSON.parse(data.toString());
-        const handled = handler(message);
-        if (handled !== false) {
-          this.connection.ws.removeListener('message', wrapper);
-        }
-      } catch (e) {
-        console.error('Failed to parse message:', e);
-      }
-    };
-    this.connection.ws.on('message', wrapper);
+    this.connection._onceResponse(handler);
   }
 
   /**

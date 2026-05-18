@@ -1,8 +1,19 @@
+import { context, createContextKey } from '@opentelemetry/api';
+
+const THREADIFY_TAGS_KEY = createContextKey('threadify.tags');
+
 /**
  * ThreadifySpanExporter - OpenTelemetry SpanExporter implementation
  * This hooks into OpenTelemetry and automatically translates Spans into Threadify Threads and Steps.
  */
 export class ThreadifySpanExporter {
+  /**
+   * Get the OTel context key used for propagating threadify.tags across child spans.
+   * @returns {symbol}
+   */
+  static getTagsContextKey() {
+    return THREADIFY_TAGS_KEY;
+  }
   /**
    * Initialize the Threadify Span Exporter
    * @param {import('./Thread.js').Connection} connection - An established Threadify Connection
@@ -101,7 +112,9 @@ export class ThreadifySpanExporter {
             this.connection._debugLog('[ThreadifySpanExporter] Failed to query thread by ref, falling back to start:', err.message);
           }
           
-          const tags = span.attributes['threadify.tags'];
+          const tagsFromSpan = span.attributes['threadify.tags'];
+          const tagsFromContext = context.active().getValue(THREADIFY_TAGS_KEY);
+          const tags = tagsFromSpan || tagsFromContext;
           const startOpts = { serviceName };
           if (tags) {
             startOpts.tags = Array.isArray(tags) ? tags : [tags];

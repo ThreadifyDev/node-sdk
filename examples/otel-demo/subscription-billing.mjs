@@ -1,8 +1,10 @@
 import { BasicTracerProvider, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
 import { trace, context } from '@opentelemetry/api';
 import { AsyncHooksContextManager } from '@opentelemetry/context-async-hooks';
-import { Threadify } from '../../src/index.js';
+import { Threadify, ThreadifySpanExporter } from '../../src/index.js';
 import { fileURLToPath } from 'url';
+
+const TAGS_KEY = ThreadifySpanExporter.getTagsContextKey();
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -23,7 +25,9 @@ export async function runSubscriptionFlow(tracer, { customerId, planName = 'Pro'
   rootSpan.setAttribute('plan.name', planName);
 
   try {
-    await context.with(trace.setSpan(context.active(), rootSpan), async () => {
+    const spanCtx = trace.setSpan(context.active(), rootSpan);
+    const ctxWithTags = tags ? spanCtx.setValue(TAGS_KEY, tags) : spanCtx;
+    await context.with(ctxWithTags, async () => {
       // 1. Plan Selection
       await selectPlan(tracer, planName);
       
