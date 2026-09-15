@@ -392,7 +392,10 @@ export class GraphQLClient {
       });
 
       if (!response.ok) {
-        throw new Error(`GraphQL request failed: ${response.status} ${response.statusText}`);
+        const error = new Error(`GraphQL request failed: ${response.status} ${response.statusText}`);
+        error.status = response.status;
+        error.code = response.status === 429 ? 'THREADIFY_ALLOWANCE_EXCEEDED' : 'THREADIFY_HTTP_ERROR';
+        throw error;
       }
 
       const result = await response.json();

@@ -225,7 +225,7 @@ export class ThreadStep {
         return false;
       };
 
-      this.thread._onceResponse(responseHandler);
+      this.thread._onceResponse(responseHandler, reject);
       this.thread._send(message);
     });
   }

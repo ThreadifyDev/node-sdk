@@ -16,6 +16,7 @@
   "scripts": {
     "build": "node scripts/build-cjs.js",
     "test": "echo \"Warning: No tests configured for production build\" && exit 0",
+    "test:connection-errors": "node --test tests/connection-errors.test.js",
     "test:unit": "NODE_OPTIONS=--experimental-vm-modules npx jest",
     "test:watch": "NODE_OPTIONS=--experimental-vm-modules npx jest --watch",
     "prepublishOnly": "npm run build && npm test",

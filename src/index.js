@@ -1,5 +1,5 @@
 import WebSocket from 'ws';
-import { Connection, ThreadInstance } from './Thread.js';
+import { Connection, ThreadInstance, connectionClosedError } from './Thread.js';
 import { Notification } from './Notification.js';
 import { DataRetriever } from './DataRetriever.js';
 import { ThreadifySpanExporter } from './OtelSpanExporter.js';
@@ -78,6 +78,14 @@ export class Threadify {
       // Initialize Connection with GraphQL URL, debug flag, and maxInFlight
       const connection = new Connection(ws, apiKey, serviceName, derivedGraphqlUrl, debug, maxInFlight);
 
+      let settled = false;
+      let timeout;
+      const fail = (error) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        reject(error);
+      };
       ws.on('open', () => {
         // Send connect message with maxInFlight
         const connectMessage = {
@@ -103,9 +111,11 @@ export class Threadify {
             if (message.status === 'success') {
               connection.isConnected = true;
               connection._debugLog('Connection successful');
+              settled = true;
+              clearTimeout(timeout);
               resolve(connection);
             } else {
-              reject(new Error(message.message || 'Connection failed'));
+              fail(new Error(message.message || 'Connection failed'));
               ws.close();
             }
           }
@@ -119,18 +129,29 @@ export class Threadify {
       
       ws.on('message', connectHandler);
 
-      ws.on('error', (error) => {
-        reject(new Error(`WebSocket error: ${error.message}`));
+      // A denied HTTP upgrade is a policy response, not an opaque network failure.
+      ws.on('unexpected-response', (_request, response) => {
+        const error = new Error(`Threadify connection rejected: HTTP ${response.statusCode}`);
+        error.status = response.statusCode;
+        error.code = response.statusCode === 429 ? 'THREADIFY_ALLOWANCE_EXCEEDED' : response.statusCode === 503 ? 'THREADIFY_LICENSE_UNAVAILABLE' : 'THREADIFY_HTTP_ERROR';
+        response.resume();
+        fail(error);
+        ws.close();
       });
 
-      ws.on('close', () => {
+      ws.on('error', (error) => {
+        fail(new Error(`WebSocket error: ${error.message}`));
+      });
+
+      ws.on('close', (code, reason) => {
+        fail(connectionClosedError(code, reason));
         connection.isConnected = false;
       });
 
       // Timeout after 10 seconds
-      setTimeout(() => {
-        if (!connection.isConnected) {
-          reject(new Error('Connection timeout'));
+      timeout = setTimeout(() => {
+        if (!settled) {
+          fail(new Error('Connection timeout'));
           ws.close();
         }
       }, 10000);

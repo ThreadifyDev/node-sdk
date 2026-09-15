@@ -225,7 +225,7 @@ export class Connection {
       };
 
       this._debugLog('[start] Setting up response handler and sending message:', message);
-      this._onceResponse(responseHandler);
+      this._onceResponse(responseHandler, reject);
       this._send(message);
     });
   }
@@ -269,6 +269,7 @@ export class Connection {
    * Close the thread connection
    */
   async close() {
+    if (this.ws.readyState === 3) return;
     return new Promise((resolve) => {
       const message = { action: 'closeConnection' };
 
@@ -282,7 +283,7 @@ export class Connection {
         return false;
       };
 
-      this._onceResponse(responseHandler);
+      this._onceResponse(responseHandler, resolve);
       this._send(message);
     });
   }
@@ -356,10 +357,12 @@ export class Connection {
    * @private
    */
   _send(message) {
-    if (this.ws.readyState === 1) { // WebSocket.OPEN
+    try {
+      if (this.ws.readyState !== 1) throw connectionClosedError();
       this.ws.send(JSON.stringify(message));
-    } else {
-      throw new Error('WebSocket is not connected');
+    } catch (error) {
+      this._rejectPending(error);
+      throw error;
     }
   }
 
@@ -369,8 +372,15 @@ export class Connection {
    * when multiple requests are in flight.
    * @private
    */
-  _onceResponse(handler) {
+  _onceResponse(handler, reject) {
+    handler.reject = reject;
     this._pendingResponseHandlers.push(handler);
+  }
+
+  /** Reject every unsettled operation when transport failure makes its outcome unknown. */
+  _rejectPending(error) {
+    const pending = this._pendingResponseHandlers.splice(0);
+    for (const handler of pending) handler.reject?.(error);
   }
 
   /**
@@ -580,14 +590,18 @@ export class Connection {
     });
 
     // Setup reconnection handling
-    this.ws.on('close', () => {
+    this.ws.on('close', (code, reason) => {
+      const error = connectionClosedError(code, reason);
+      this._rejectPending(error);
       this._debugLog('[Thread] WebSocket closed');
       this.isConnected = false;
       this._stopHeartbeat();
     });
 
     this.ws.on('error', (error) => {
-      console.error('[Thread] WebSocket error:', error);
+      this._rejectPending(error);
+      this._stopHeartbeat();
+      this._debugLog('[Thread] WebSocket error:', error.message);
     });
   }
 
@@ -822,7 +836,7 @@ export class Connection {
         return false;
       };
 
-      this._onceResponse(responseHandler);
+      this._onceResponse(responseHandler, reject);
 
       // Send appropriate join message
       if (isTokenJoin) {
@@ -905,10 +919,7 @@ export class ThreadInstance {
    * @param {Object} message - Message to send
    */
   _send(message) {
-    if (!this.connection.ws || this.connection.ws.readyState !== 1) {
-      throw new Error('WebSocket not connected');
-    }
-    this.connection.ws.send(JSON.stringify(message));
+    this.connection._send(message);
   }
 
   /**
@@ -916,8 +927,8 @@ export class ThreadInstance {
    * Delegates to Connection's centralized FIFO dispatcher.
    * @param {Function} handler - Response handler function
    */
-  _onceResponse(handler) {
-    this.connection._onceResponse(handler);
+  _onceResponse(handler, reject) {
+    this.connection._onceResponse(handler, reject);
   }
 
   /**
@@ -965,7 +976,7 @@ export class ThreadInstance {
           return true;
         }
         return false;
-      });
+      }, reject);
 
       this._send({
         action: 'inviteParty',
@@ -1029,7 +1040,7 @@ export class ThreadInstance {
           return true;
         }
         return false;
-      });
+      }, reject);
 
       this._send({
         action: 'addRefs',
@@ -1109,7 +1120,7 @@ export class ThreadInstance {
           return true;
         }
         return false;
-      });
+      }, reject);
 
       // Prepare end data
       const endData = { status };
@@ -1143,4 +1154,27 @@ export class ThreadInstance {
     // Remove from connection's thread registry
     this.connection.threads.delete(this.threadId);
   }
+}
+
+/** Preserve explicit policy close reasons without guessing why an ordinary disconnect occurred. */
+export function connectionClosedError(closeCode, rawReason) {
+  const reason = rawReason?.toString() || '';
+  const error = new Error('Threadify connection closed before the operation was acknowledged; its outcome may be unknown');
+  error.code = 'THREADIFY_CONNECTION_CLOSED';
+  error.status = 502;
+  error.closeCode = closeCode;
+  if (closeCode === 1008 && reason === 'registry_allowance_exceeded') {
+    error.message = 'Threadify Registry allowance exceeded';
+    error.code = 'THREADIFY_ALLOWANCE_EXCEEDED';
+    error.status = 429;
+  } else if (closeCode === 1008 && reason === 'license_unavailable') {
+    error.message = 'Threadify license is unavailable';
+    error.code = 'THREADIFY_LICENSE_UNAVAILABLE';
+    error.status = 503;
+  } else if (closeCode === 1013 && reason === 'accounting_unavailable') {
+    error.message = 'Threadify accounting is unavailable';
+    error.code = 'THREADIFY_ACCOUNTING_UNAVAILABLE';
+    error.status = 503;
+  }
+  return error;
 }
