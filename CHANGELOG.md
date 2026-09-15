@@ -2,6 +2,18 @@
 
 All notable changes to the Threadify SDK will be documented in this file.
 
+## [0.2.0] - 2026-09-15
+
+### Added
+- Connect with one Engine URL, including reverse-proxy path prefixes.
+- Query threads with reference maps through `getThreadsByRef`.
+- Wait for contract permission and exact-event validation, with cancellation and recovery identifiers.
+- Surface structured licensing and connection errors.
+
+### Release automation
+- Validate the packed ESM and CommonJS entry points before publishing.
+- Publish the tested tarball to npm through GitHub Actions OIDC with provenance.
+
 ## [0.1.5] - 2026-02-04
 
 ### Added
