@@ -26,13 +26,13 @@ for (let i = 0; i < args.length; i++) {
 const customerId = `CUST-${Math.floor(Math.random() * 10000)}`;
 
 async function main() {
-  const API_KEY = process.env.THREADIFY_LOCAL_API_KEY || 'your-api-key-here';
+  const API_KEY = process.env.THREADIFY_API_KEY || 'your-api-key-here';
   
   console.log('🔗 Connecting to Threadify...');
   let connection;
   try {
     connection = await Threadify.connect(API_KEY, 'user-journey-orchestrator', {
-      wsUrl: 'ws://localhost:8081/threads', debug: true
+      // wsUrl: 'ws://localhost:8081/threads', debug: true
     });
     console.log('✅ Connected successfully!');
   } catch (err) {

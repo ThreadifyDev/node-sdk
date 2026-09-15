@@ -2,7 +2,20 @@
  * TypeScript definitions for @threadify/sdk
  */
 
+/** Exactly one reference key/value pair. Validated at runtime. */
+export type ThreadRef = Record<string, string>;
+
+export interface ThreadRefQueryOptions {
+  status?: string;
+  startedAfter?: string;
+  startedBefore?: string;
+  limit?: number;
+  offset?: number;
+}
+
 export interface ThreadifyConnectOptions {
+  /** Engine base URL. The SDK derives transport paths, including reverse-proxy prefixes. */
+  engineUrl?: string;
   /** WebSocket URL (default: ws://localhost:8081/threads) */
   url?: string;
   /** WebSocket URL (alias for url) */
@@ -34,7 +47,22 @@ export interface SubStepData {
   [key: string]: any;
 }
 
+export interface WaitOptions {
+  /** Caller wait deadline in ms (default 10000), also sent as the Engine wait budget. */
+  timeout?: number;
+  /** Cancels waiting without undoing an event or a permission already granted. */
+  signal?: AbortSignal;
+}
+export interface ReportOptions extends WaitOptions { waitFor?: boolean; }
+export interface ValidationDecision {
+  threadId: string; stepName: string; stepId?: string; invocationId?: string;
+  decision: 'allowed' | 'pending' | 'passed' | 'violated' | 'unvalidated' | 'denied' | 'unavailable' | 'cancelled' | 'timed_out';
+  message?: string; violations?: Array<Record<string, unknown>>;
+}
+export interface InvocationGrant extends ValidationDecision { invocationId: string; cancel(): Promise<ValidationDecision>; }
 export interface StepResult {
+  stepId?: string;
+  validation?: ValidationDecision;
   stepName: string;
   threadId: string;
   status: StepStatus;
@@ -242,7 +270,7 @@ export class ThreadStep {
    * // Without data
    * await step.success();
    */
-  success(messageOrData?: string | StepContext): Promise<StepResult>;
+  success(messageOrData?: string | StepContext, options?: ReportOptions): Promise<StepResult>;
 
   /**
    * Mark step as failed
@@ -258,7 +286,7 @@ export class ThreadStep {
    * // Without data
    * await step.failed();
    */
-  failed(messageOrData?: string | StepContext): Promise<StepResult>;
+  failed(messageOrData?: string | StepContext, options?: ReportOptions): Promise<StepResult>;
 
   /**
    * Mark step as error
@@ -274,7 +302,7 @@ export class ThreadStep {
    * // Without data
    * await step.error();
    */
-  error(messageOrData?: string | StepContext): Promise<StepResult>;
+  error(messageOrData?: string | StepContext, options?: ReportOptions): Promise<StepResult>;
 }
 
 export interface InvitePartyOptions {
@@ -316,6 +344,8 @@ export class ThreadInstance {
    * @returns New ThreadStep instance
    */
   step(stepName: string, options?: ThreadOptions): ThreadStep;
+  waitFor(stepName: string, options?: WaitOptions & { invocationId?: string }): Promise<InvocationGrant>;
+  waitForValidation(stepName: string, stepId: string, options?: WaitOptions): Promise<ValidationDecision>;
 
   /**
    * Add external references to this thread
@@ -434,18 +464,18 @@ export class Connection {
 
   /**
    * Get archived thread by reference
-   * @param refKey - Reference key
-   * @param refValue - Reference value
+   * @param refs - Exactly one reference key/value pair
    * @returns Promise resolving to archived thread
    */
-  getThreadByRef(refKey: string, refValue: string): Promise<ArchivedThread>;
+  getThreadByRef(refs: ThreadRef): Promise<ArchivedThread | null>;
 
   /**
    * Get multiple threads by reference
-   * @param refQuery - Reference query {refKey, refValue}
+   * @param refs - Exactly one reference key/value pair
+   * @param options - Optional filters and pagination
    * @returns Promise resolving to array of archived threads
    */
-  getThreadsByRef(refQuery: { refKey: string; refValue: string }): Promise<ArchivedThread[]>;
+  getThreadsByRef(refs: ThreadRef, options?: ThreadRefQueryOptions): Promise<ArchivedThread[]>;
 
   /**
    * Get thread chain starting from any thread
@@ -547,6 +577,7 @@ export class Threadify {
    * @returns Configured Threadify instance
    */
   static create(config: {
+    engineUrl?: string;
     apiKey: string;
     serviceName?: string;
     wsUrl?: string;

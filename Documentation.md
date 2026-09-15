@@ -14,7 +14,9 @@ npm install @threadify/sdk
 import { Threadify } from '@threadify/sdk';
 
 // Connect with your API key
-const connection = await Threadify.connect('your-api-key', 'my-service');
+const connection = await Threadify.connect('your-api-key', 'my-service', {
+  engineUrl: 'https://threadify.example.com'
+});
 
 // Start tracking a workflow
 const thread = await connection.start();
@@ -30,6 +32,12 @@ await thread.step('payment_processed')
 ```
 
 ---
+
+For a self-hosted installation, use the Engine URL from **Settings → Engine**.
+The JavaScript SDK derives its WebSocket and GraphQL paths automatically,
+including any proxy prefix. `Threadify.create({ apiKey, serviceName, engineUrl })`
+uses the same setting. Explicit `url`, `wsUrl` and `graphqlUrl` remain available
+for older installations but cannot be combined with `engineUrl`.
 
 ## Core Concepts
 
@@ -259,13 +267,13 @@ const thread = await connection.getThread('thread-uuid-123');
 
 ---
 
-#### `connection.getThreadsByRef({ refKey, refValue, ...filters })`
+#### `connection.getThreadsByRef(refs, options?)`
 
 Find threads by external reference with optional server-side filtering.
 
 **Parameters:**
-- `refKey` (string, required): Reference key (e.g., "orderId")
-- `refValue` (string, required): Reference value (e.g., "ORDER-12345")
+- `refs`: Exactly one key/value pair, e.g. `{orderId: "ORDER-12345"}`. Empty or multiple refs are rejected.
+- Filters below belong in the optional second argument.
 - `status` (string, optional): Filter by status ("active", "completed", etc.)
 - `startedAfter` (string, optional): ISO timestamp - only threads started after this time
 - `startedBefore` (string, optional): ISO timestamp - only threads started before this time
@@ -276,11 +284,11 @@ Find threads by external reference with optional server-side filtering.
 
 **Example:**
 ```javascript
-const threads = await connection.getThreadsByRef({ refKey: 'orderId', refValue: 'ORDER-12345' });
+const threads = await connection.getThreadsByRef({ orderId: 'ORDER-12345' });
 // With filters: status, time range, pagination
 const filtered = await connection.getThreadsByRef({ 
-  refKey: 'orderId', 
-  refValue: 'ORDER-12345',
+  orderId: 'ORDER-12345'
+}, {
   status: 'completed',
   startedAfter: '2026-01-01T00:00:00Z',
   limit: 10
@@ -467,8 +475,7 @@ completeData.validationResults.forEach(val => {
 ```javascript
 // Find all threads for a specific order
 const threads = await connection.getThreadsByRef({
-  refKey: 'orderId',
-  refValue: 'ORDER-12345'
+  orderId: 'ORDER-12345'
 });
 
 console.log(`Found ${threads.length} threads for order ORDER-12345`);

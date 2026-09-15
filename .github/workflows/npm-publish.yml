@@ -1,0 +1,64 @@
+name: Publish npm package
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: npm-publish
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    if: github.repository == 'ThreadifyDev/node-sdk'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      npm-tag: ${{ steps.release.outputs.npm-tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Check release version
+        id: release
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          IS_PRERELEASE: ${{ github.event.release.prerelease }}
+        run: node scripts/check-release.js
+      - run: npm ci
+      - run: npm test
+      - run: npm run test:package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-package
+          path: .release/package.tgz
+          if-no-files-found: error
+          retention-days: 7
+          include-hidden-files: true
+
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org
+      - uses: actions/download-artifact@v4
+        with:
+          name: npm-package
+          path: .release
+      - name: Publish the tested tarball
+        env:
+          NPM_DIST_TAG: ${{ needs.verify.outputs.npm-tag }}
+        run: npm publish .release/package.tgz --access public --provenance --tag "$NPM_DIST_TAG" --ignore-scripts

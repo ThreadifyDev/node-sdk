@@ -4,8 +4,32 @@ import { Notification } from './Notification.js';
 import { DataRetriever } from './DataRetriever.js';
 import { ThreadifySpanExporter } from './OtelSpanExporter.js';
 
+// A deployment base is the only address needed for both writing and querying threads.
+function connectionEndpoints(options) {
+  if (options.engineUrl !== undefined) {
+    if (options.url !== undefined || options.wsUrl !== undefined || options.graphqlUrl !== undefined) {
+      throw new Error('Use engineUrl on its own, without url, wsUrl or graphqlUrl');
+    }
+    if (typeof options.engineUrl !== 'string' || !options.engineUrl.trim()) throw new Error('engineUrl must be an absolute HTTP or HTTPS URL');
+    let base;
+    try { base = new URL(options.engineUrl.trim()); }
+    catch { throw new Error('engineUrl must be an absolute HTTP or HTTPS URL'); }
+    if (!['http:', 'https:'].includes(base.protocol) || !base.hostname || base.username || base.password || base.search || base.hash || /[?#]/.test(options.engineUrl)) {
+      throw new Error('engineUrl must use HTTP or HTTPS without credentials, a query or a fragment');
+    }
+    const address = base.href.replace(/\/+$/, '');
+    const socket = new URL(address + '/threads');
+    socket.protocol = base.protocol === 'https:' ? 'wss:' : 'ws:';
+    return { wsUrl: socket.href, graphqlUrl: address + '/graphql' };
+  }
+  // Explicit transport URLs remain available for existing installations with split routing.
+  const wsUrl = options.wsUrl || options.url || 'wss://eng.threadify.dev/threads';
+  return { wsUrl, graphqlUrl: options.graphqlUrl || wsUrl.replace(/^ws:/, 'http:').replace(/^wss:/, 'https:').replace(/\/threads\/?$/, '/graphql') };
+}
+
 /**
  * @typedef {Object} ThreadifyConnectOptions
+ * @property {string} [engineUrl] - Engine base URL; the SDK derives WebSocket and GraphQL paths.
  * @property {string} [url] - WebSocket URL (default: ws://localhost:8081/threads)
  * @property {string} [wsUrl] - WebSocket URL (alias for url)
  * @property {string} [graphqlUrl] - GraphQL URL (default: derived from wsUrl)
@@ -21,10 +45,9 @@ import { ThreadifySpanExporter } from './OtelSpanExporter.js';
  * // Basic connection
  * const connection = await Threadify.connect('api-key', 'my-service');
  * 
- * // Custom endpoints with debug
+ * // Self-hosted Engine
  * const connection = await Threadify.connect('api-key', 'my-service', {
- *   wsUrl: 'wss://api.example.com/threads',
- *   graphqlUrl: 'https://api.example.com/graphql',
+ *   engineUrl: 'https://threadify.example.com',
  *   debug: true
  * });
  */
@@ -46,7 +69,7 @@ export class Threadify {
    * @example
    * const connection = await Threadify.connect('your-api-key', 'payment-service', {
    *   debug: true,
-   *   wsUrl: 'wss://your-domain.com/threads'
+   *   engineUrl: 'https://threadify.example.com'
    * });
    */
   static async connect(apiKey, serviceName = null, options = {}) {
@@ -55,9 +78,6 @@ export class Threadify {
     }
 
     const {
-      url,
-      wsUrl = url || 'wss://eng.threadify.dev/threads',
-      graphqlUrl,
       debug = false,
       maxInFlight = 10
     } = options;
@@ -67,11 +87,7 @@ export class Threadify {
       throw new Error('maxInFlight must be between 1 and 100');
     }
 
-    // Derive GraphQL URL from WebSocket URL if not provided
-    const derivedGraphqlUrl = graphqlUrl || wsUrl
-      .replace('ws://', 'http://')
-      .replace('wss://', 'https://')
-      .replace('/threads', '/graphql');
+    const { wsUrl, graphqlUrl: derivedGraphqlUrl } = connectionEndpoints(options);
 
     return new Promise((resolve, reject) => {
       const ws = new WebSocket(wsUrl);
@@ -162,6 +178,7 @@ export class Threadify {
    * Create a new Threadify instance with custom configuration
    * @param {Object} config - Configuration object
    * @param {string} config.apiKey - Your API key
+   * @param {string} config.engineUrl - Engine base URL
    * @param {string} config.url - WebSocket URL
    * @param {string} config.wsUrl - WebSocket URL (alias for url)
    * @param {string} config.graphqlUrl - GraphQL URL
@@ -172,6 +189,7 @@ export class Threadify {
     return {
       connect: (serviceName = config.serviceName) => {
         return Threadify.connect(config.apiKey, serviceName, {
+          engineUrl: config.engineUrl,
           url: config.url,
           wsUrl: config.wsUrl,
           graphqlUrl: config.graphqlUrl

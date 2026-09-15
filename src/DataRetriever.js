@@ -3,6 +3,23 @@
  * Provides read-only access to historical thread data
  */
 
+// Ref maps deliberately contain one pair: the engine's lookup is singular.
+function referencePair(refs) {
+  if (!refs || typeof refs !== 'object' || Array.isArray(refs) ||
+      ![Object.prototype, null].includes(Object.getPrototypeOf(refs))) {
+    throw new TypeError('Reference must be an object containing exactly one ref pair');
+  }
+  const entries = Object.entries(refs);
+  if (entries.length !== 1) {
+    throw new TypeError('Reference must contain exactly one ref pair');
+  }
+  const [refKey, refValue] = entries[0];
+  if (!refKey.trim() || typeof refValue !== 'string' || !refValue.trim()) {
+    throw new TypeError('Reference key and value must be non-empty strings');
+  }
+  return { refKey, refValue };
+}
+
 // GraphQL Fragments for reusability
 const THREAD_FIELDS = `
   id
@@ -444,13 +461,12 @@ export class DataRetriever {
   }
 
   /**
-   * Get thread(s) by reference key-value pair
-   * @param {Object} ref - Reference object
-   * @param {string} ref.refKey - Reference key (e.g., "orderId")
-   * @param {string} ref.refValue - Reference value (e.g., "ORD-12345")
-   * @returns {Promise<ArchivedThread|null>} - First matching thread or null
+   * Find the first matching thread, or null.
+   * @param {Object<string, string>} refs - Exactly one ref pair, e.g. {order_id: 'ORD-1001'}
+   * @returns {Promise<ArchivedThread|null>}
    */
-  async getThreadByRef({ refKey, refValue }) {
+  async getThreadByRef(refs) {
+    const { refKey, refValue } = referencePair(refs);
     const query = `
       query GetThreadByRef($refKey: String, $refValue: String!) {
         threadsByRef(refKey: $refKey, refValue: $refValue) {
@@ -472,18 +488,13 @@ export class DataRetriever {
   }
 
   /**
-   * Get multiple threads by reference
-   * @param {Object} ref - Reference object
-   * @param {string} ref.refKey - Reference key
-   * @param {string} ref.refValue - Reference value
-   * @param {string} ref.status - Optional status filter (e.g., "active", "completed")
-   * @param {string} ref.startedAfter - Optional ISO timestamp filter
-   * @param {string} ref.startedBefore - Optional ISO timestamp filter
-   * @param {number} ref.limit - Optional limit (default: 50)
-   * @param {number} ref.offset - Optional offset for pagination (default: 0)
-   * @returns {Promise<Array<ArchivedThread>>} - All matching threads
+   * Find matching threads with optional server-side filters and pagination.
+   * @param {Object<string, string>} refs - Exactly one ref pair
+   * @param {Object} options - status, startedAfter, startedBefore, limit, offset
+   * @returns {Promise<Array<ArchivedThread>>}
    */
-  async getThreadsByRef({ refKey, refValue, status, startedAfter, startedBefore, limit, offset }) {
+  async getThreadsByRef(refs, { status, startedAfter, startedBefore, limit, offset } = {}) {
+    const { refKey, refValue } = referencePair(refs);
     const query = `
       query GetThreadsByRef(
         $refKey: String

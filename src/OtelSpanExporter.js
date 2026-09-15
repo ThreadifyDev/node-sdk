@@ -100,8 +100,7 @@ export class ThreadifySpanExporter {
           // Hybrid Approach: Check if thread exists in the backend using getThreadByRef
           try {
             const archivedThread = await this.connection.getThreadByRef({ 
-              refKey: 'otel_trace_id', 
-              refValue: traceId 
+              otel_trace_id: traceId
             });
             
             if (archivedThread) {
@@ -147,6 +146,7 @@ export class ThreadifySpanExporter {
       // Step Name
       const stepName = span.attributes['threadify.step_name'] || span.name;
       const step = thread.step(stepName, span.attributes['threadify.service']);
+      if (span.attributes['threadify.invocation_id']) step.event.invocationId = span.attributes['threadify.invocation_id'];
       
       // Separate attributes into refs, context, and custom mapping
       const context = {};
@@ -158,7 +158,7 @@ export class ThreadifySpanExporter {
       // Map attributes
       for (const [key, value] of Object.entries(span.attributes)) {
         // Skip internal threadify directives
-        if (['threadify.thread_id', 'threadify.contract', 'threadify.label', 'threadify.step_name', 'threadify.role', 'threadify.service', 'threadify.tags'].includes(key)) {
+        if (['threadify.thread_id', 'threadify.contract', 'threadify.label', 'threadify.step_name', 'threadify.role', 'threadify.service', 'threadify.tags', 'threadify.invocation_id'].includes(key)) {
           continue;
         }
 

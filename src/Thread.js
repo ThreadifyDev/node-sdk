@@ -1,3 +1,4 @@
+import { request, waitForDecision, waitError, invocationID } from './Wait.js';
 import { ThreadStep } from './ThreadStep.js';
 import { Notification } from './Notification.js';
 import { DataRetriever, ArchivedThread, ArchivedStep } from './DataRetriever.js';
@@ -72,8 +73,8 @@ export class Connection {
 
   /**
    * Get archived thread by reference
-   * @param {Object} refQuery - Reference query {refKey, refValue}
-   * @returns {Promise<ArchivedThread[]>} - Array of archived threads
+   * @param {Object} refQuery - Exactly one ref pair, e.g. {order_id: 'ORD-1001'}
+   * @returns {Promise<ArchivedThread|null>} - First match or null
    */
   async getThreadByRef(refQuery) {
     return this._getDataRetriever().getThreadByRef(refQuery);
@@ -81,11 +82,11 @@ export class Connection {
 
   /**
    * Get multiple threads by reference
-   * @param {Object} refQuery - Reference query {refKey, refValue}
+   * @param {Object} refQuery - Exactly one ref pair, e.g. {order_id: 'ORD-1001'}
    * @returns {Promise<ArchivedThread[]>} - Array of archived threads
    */
-  async getThreadsByRef(refQuery) {
-    return this._getDataRetriever().getThreadsByRef(refQuery);
+  async getThreadsByRef(refQuery, options = {}) {
+    return this._getDataRetriever().getThreadsByRef(refQuery, options);
   }
 
 
@@ -879,6 +880,7 @@ export class ThreadInstance {
     this.refs = refs;
     this.tags = []; // Tags applied at thread creation (immutable)
     this.steps = new Map();
+    this.invocationGrants = new Map();
     this.pendingWaits = new Map(); // stepName -> { resolve, reject, timeoutId, statuses }
   }
 
@@ -987,35 +989,36 @@ export class ThreadInstance {
     });
   }
 
-  // /**
-  //  * Wait for a notification for a specific step
-  //  * @param {string} stepName - Name of the step to wait for
-  //  * @param {Object} options - Wait options
-  //  * @param {number} [options.timeout=5000] - Timeout in milliseconds
-  //  * @param {Array<string>} [options.statuses] - Only resolve for these statuses (e.g., ['success', 'failed'])
-  //  * @returns {Promise<Notification>} - Resolves with notification when it arrives
-  //  */
-  // waitFor(stepName, options = {}) {
-  //   const { timeout = 5000, statuses = null } = options;
-  //   
-  //   if (!stepName || typeof stepName !== 'string') {
-  //     return Promise.reject(new Error('Step name must be a non-empty string'));
-  //   }
-  //   
-  //   return new Promise((resolve, reject) => {
-  //     const timeoutId = setTimeout(() => {
-  //       this.pendingWaits.delete(stepName);
-  //       reject(new Error(`Timeout waiting for step: ${stepName} (${timeout}ms)`));
-  //     }, timeout);
-  //
-  //     this.pendingWaits.set(stepName, {
-  //       resolve,
-  //       reject,
-  //       timeoutId,
-  //       statuses
-  //     });
-  //   });
-  // }
+  /** Wait for flow permission for one invocation. Does not mark the step successful. */
+  async waitFor(stepName, options = {}) {
+    if (typeof stepName !== 'string' || !stepName.trim()) throw new TypeError('Step name is required');
+    const id = options.invocationId ?? invocationID();
+    const query = { stepName, invocationId: id };
+    let result;
+    try { result = await waitForDecision(this, query, options); }
+    catch (error) { error.invocationId = id; error.stepName = stepName; throw error; }
+    if (result.decision !== 'allowed') throw waitError('THREADIFY_PERMISSION_DENIED', result.message || 'Permission denied', { decision: result });
+    const grant = {
+      ...result,
+      cancel: async () => {
+        const cancelled = await request(this.connection, { action: 'waitFor', threadId: this.threadId, ...query, cancel: true });
+        if (cancelled.decision !== 'cancelled') throw waitError('THREADIFY_PERMISSION_DENIED', cancelled.message, { decision: cancelled });
+        if (this.invocationGrants.get(stepName)?.invocationId === id) this.invocationGrants.delete(stepName);
+        return cancelled;
+      }
+    };
+    this.invocationGrants.set(stepName, grant);
+    return grant;
+  }
+
+  /** Resume waiting for the exact event returned by a prior submission. */
+  async waitForValidation(stepName, stepId, options = {}) {
+    const result = await waitForDecision(this, { stepName, stepId }, options);
+    if (result.decision !== 'passed') {
+      throw waitError(result.decision === 'violated' ? 'THREADIFY_VALIDATION_VIOLATED' : 'THREADIFY_VALIDATION_UNAVAILABLE', result.message || 'Validation unavailable', { validation: result, stepId });
+    }
+    return result;
+  }
 
   /**
    * Add external references to this thread

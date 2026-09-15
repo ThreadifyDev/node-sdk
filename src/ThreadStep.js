@@ -1,3 +1,4 @@
+import { request, waitOptions, checkedValidation } from './Wait.js';
 /**
  * ThreadStep - Represents a step in a thread execution with fluent API
  * @example
@@ -49,6 +50,8 @@ export class ThreadStep {
       return this.manualIdempotencyKey;
     }
     
+    if (this.event.invocationId) return this.event.invocationId;
+
     // Create stable string representation of context
     const contextStr = JSON.stringify(this.event.context, Object.keys(this.event.context).sort());
     const input = this.stepName + contextStr;
@@ -128,7 +131,15 @@ export class ThreadStep {
    * @param {string|Object} messageOrData - Optional message (string) or data object
    * @returns {Promise<ThreadStep>} - Returns this for method chaining
    */
-  async stop(status = 'success', messageOrData = '') {
+  async stop(status = 'success', messageOrData = '', options = {}) {
+    const waitTimeout = options.waitFor ? Math.ceil(waitOptions(options).timeout) : null;
+    const grant = this.thread.invocationGrants?.get(this.stepName);
+    if (grant && this.event.invocationId && grant.invocationId !== this.event.invocationId) throw new Error("Invocation does not match the claimed step");
+    if (grant) {
+      this.event.invocationId = grant.invocationId;
+      if (!this.manualIdempotencyKey) this.manualIdempotencyKey = grant.invocationId;
+      this.thread.invocationGrants.delete(this.stepName);
+    }
     // Set final state if not already set manually (e.g. by OTel exporter)
     if (!this.event.finishedAt) {
       this.event.finishedAt = new Date().toISOString();
@@ -163,11 +174,18 @@ export class ThreadStep {
     this.event.idempotencyKey = this._generateIdempotencyKey();
     
     // Send the complete event to server
+    let acknowledgement;
     try {
-      await this._sendEvent();
+      acknowledgement = options.waitFor || this.event.invocationId
+        ? await request(this.thread.connection, { ...this.event, ...(options.waitFor ? { waitFor: true, timeoutMs: waitTimeout } : {}) }, options)
+        : await this._sendEvent();
     } catch (error) {
+      // A transport deadline may precede the acknowledgement; retain the key so
+      // callers can retry the same report without creating another event.
+      error.idempotencyKey ??= this.event.idempotencyKey;
+      error.invocationId ??= this.event.invocationId;
       // Check if it's a duplicate error
-      if (error.isDuplicate) {
+      if (error.isDuplicate && !options.waitFor) {
         console.warn('⚠️ Duplicate step detected:', error.message);
         // Don't throw - this is expected behavior
         return {
@@ -183,8 +201,16 @@ export class ThreadStep {
       throw error;
     }
     
+    let validation;
+    if (options.waitFor) {
+      if (!acknowledgement.stepId) throw new Error('Engine did not return a step event ID');
+      try { validation = checkedValidation(acknowledgement.validation, acknowledgement.stepId); }
+      catch (error) { error.stepId = acknowledgement.stepId; throw error; }
+    }
     // Return a clean response object without internal details
     return {
+      stepId: acknowledgement?.stepId,
+      ...(validation ? { validation } : {}),
       stepName: this.stepName,
       threadId: this.thread.threadId,
       status: this.event.status,
@@ -208,7 +234,7 @@ export class ThreadStep {
 
       // Set up one-time listener for response
       const responseHandler = (data) => {
-        if (data.action === 'recordThreadEvent') {
+        if (data.action === 'recordThreadEvent' && !data.requestId) {
           // If server includes stepName, verify it matches
           if (data.stepName && data.stepName !== this.stepName) return false;
           
@@ -284,8 +310,8 @@ export class ThreadStep {
    * // Without data
    * await step.success();
    */
-  async success(messageOrData = '') {
-    return this.stop('success', messageOrData);
+  async success(messageOrData = '', options = {}) {
+    return this.stop('success', messageOrData, options);
   }
 
   /**
@@ -302,8 +328,8 @@ export class ThreadStep {
    * // Without data
    * await step.error();
    */
-  async error(messageOrData = '') {
-    return this.stop('error', messageOrData);
+  async error(messageOrData = '', options = {}) {
+    return this.stop('error', messageOrData, options);
   }
 
   /**
@@ -320,7 +346,7 @@ export class ThreadStep {
    * // Without data
    * await step.failed();
    */
-  async failed(messageOrData = '') {
-    return this.stop('failed', messageOrData);
+  async failed(messageOrData = '', options = {}) {
+    return this.stop('failed', messageOrData, options);
   }
 }
