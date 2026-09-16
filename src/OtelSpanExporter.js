@@ -1,5 +1,18 @@
 import { context, createContextKey } from '@opentelemetry/api';
 
+const startQueues = new WeakMap();
+
+// The WebSocket protocol matches start responses by action. Serialize exporter starts
+// on each connection so concurrent traces cannot consume each other's response.
+function startThread(connection, ...args) {
+  const previous = startQueues.get(connection) || Promise.resolve();
+  const current = previous.catch(() => {}).then(() => connection.start(...args));
+  const settled = current.catch(() => {});
+  startQueues.set(connection, settled);
+  settled.then(() => { if (startQueues.get(connection) === settled) startQueues.delete(connection); });
+  return current;
+}
+
 const THREADIFY_TAGS_KEY = createContextKey('threadify.tags');
 
 /**
@@ -29,9 +42,14 @@ export class ThreadifySpanExporter {
     this.options = {
       refs: [],
       filters: [],
+      useWorkflowRunId: true,
       ...options
     };
     
+    if (typeof this.options.useWorkflowRunId !== 'boolean') {
+      throw new TypeError('useWorkflowRunId must be a boolean');
+    }
+
     // Normalize refs to object format for easier lookup
     if (Array.isArray(this.options.refs)) {
       const refMap = {};
@@ -49,6 +67,7 @@ export class ThreadifySpanExporter {
     // Map of traceId -> Promise<ThreadInstance>
     // Used to ensure we only create one ThreadInstance per trace
     this.traceThreadMap = new Map();
+    this.traceReferences = new Map();
   }
 
   /**
@@ -78,14 +97,43 @@ export class ThreadifySpanExporter {
    * Internal method to get or start a ThreadInstance for a given trace
    * @private
    */
+  // Explicit internal thread targets preserve their existing behavior.
+  _externalRef(span) {
+    const attrs = { ...(span.resource?.attributes || {}), ...span.attributes };
+    if (attrs['threadify.thread_id']) return null;
+    for (const key of ['threadify.external_ref', ...(this.options.useWorkflowRunId ? ['workflow.run_id'] : [])]) {
+      const value = attrs[key];
+      if (value === undefined) continue;
+      if (typeof value !== 'string') throw new TypeError(`${key} must be a string`);
+      const ref = value.trim();
+      if (new TextEncoder().encode(ref).length > 1024) throw new Error(`${key} exceeds 1024 bytes`);
+      if (ref) return ref;
+    }
+    return this.traceReferences.get(span.spanContext().traceId) || null;
+  }
+
   async _getOrStartThread(span) {
     const traceId = span.spanContext().traceId;
+    const externalRef = this._externalRef(span);
+    // Resolve every correlated span at the Engine so contract changes cannot hide in a client cache.
+    if (externalRef) {
+      const attrs = { ...(span.resource?.attributes || {}), ...span.attributes };
+      const refs = { 'threadify.external_ref': externalRef, otel_trace_id: traceId };
+      const options = { refs, serviceName: attrs['threadify.service'] || this.connection.serviceName };
+      if (attrs['threadify.tags']) options.tags = Array.isArray(attrs['threadify.tags']) ? attrs['threadify.tags'] : [attrs['threadify.tags']];
+      const thread = await startThread(this.connection, attrs['threadify.label'] || span.name, attrs['threadify.contract'] || null, options);
+      if (!this.traceReferences.has(traceId)) {
+        this.traceReferences.set(traceId, externalRef);
+        setTimeout(() => this.traceReferences.delete(traceId), 10 * 60 * 1000).unref?.();
+      }
+      return thread;
+    }
     
     if (!this.traceThreadMap.has(traceId)) {
       // Create a promise that resolves to the thread instance
       const threadPromise = (async () => {
         // Look for an existing thread ID if provided via attributes
-        const existingThreadId = span.attributes['threadify.thread_id'];
+        const existingThreadId = span.attributes['threadify.thread_id'] ?? span.resource?.attributes?.['threadify.thread_id'];
         
         if (existingThreadId) {
           const role = span.attributes['threadify.role'] || 'participant';
@@ -97,28 +145,14 @@ export class ThreadifySpanExporter {
           const serviceName = span.attributes['threadify.service'] || this.connection.serviceName;
           const role = span.attributes['threadify.role'] || 'participant';
           
-          // Hybrid Approach: Check if thread exists in the backend using getThreadByRef
-          try {
-            const archivedThread = await this.connection.getThreadByRef({ 
-              otel_trace_id: traceId
-            });
-            
-            if (archivedThread) {
-              this.connection._debugLog(`[ThreadifySpanExporter] Found existing thread ${archivedThread.id} via GraphQL, joining...`);
-              return await this.connection.join(archivedThread.id, role);
-            }
-          } catch (err) {
-            this.connection._debugLog('[ThreadifySpanExporter] Failed to query thread by ref, falling back to start:', err.message);
-          }
-          
           const tagsFromSpan = span.attributes['threadify.tags'];
           const tagsFromContext = context.active().getValue(THREADIFY_TAGS_KEY);
           const tags = tagsFromSpan || tagsFromContext;
-          const startOpts = { serviceName };
+          const startOpts = { serviceName, refs: { otel_trace_id: traceId } };
           if (tags) {
             startOpts.tags = Array.isArray(tags) ? tags : [tags];
           }
-          return await this.connection.start(label, contractName, startOpts);
+          return await startThread(this.connection, label, contractName, startOpts);
         }
       })();
       
@@ -126,7 +160,7 @@ export class ThreadifySpanExporter {
       
       // Start cleanup timer to prevent memory leaks (traces are usually short-lived)
       // We remove it from the map after 10 minutes. If a span for this trace arrives after 10 mins,
-      // it will simply create a new Thread, which is an acceptable edge case for long-running traces.
+      // the Engine resolves the same durable trace identity again.
       setTimeout(() => {
         this.traceThreadMap.delete(traceId);
       }, 10 * 60 * 1000).unref?.(); // Use unref if in Node.js so it doesn't keep process alive
@@ -146,6 +180,7 @@ export class ThreadifySpanExporter {
       // Step Name
       const stepName = span.attributes['threadify.step_name'] || span.name;
       const step = thread.step(stepName, span.attributes['threadify.service']);
+      step.idempotencyKey(`otel:${span.spanContext().traceId}:${span.spanContext().spanId}`);
       if (span.attributes['threadify.invocation_id']) step.event.invocationId = span.attributes['threadify.invocation_id'];
       
       // Separate attributes into refs, context, and custom mapping
@@ -155,16 +190,20 @@ export class ThreadifySpanExporter {
         otel_span_id: span.spanContext().spanId
       };
       
+      if (this._externalRef(span)) delete refs.otel_trace_id;
+      context['otel.trace_id'] = span.spanContext().traceId;
+      context['otel.span_id'] = span.spanContext().spanId;
+
       // Map attributes
       for (const [key, value] of Object.entries(span.attributes)) {
         // Skip internal threadify directives
-        if (['threadify.thread_id', 'threadify.contract', 'threadify.label', 'threadify.step_name', 'threadify.role', 'threadify.service', 'threadify.tags', 'threadify.invocation_id'].includes(key)) {
+        if (['threadify.external_ref', 'threadify.thread_id', 'threadify.contract', 'threadify.label', 'threadify.step_name', 'threadify.role', 'threadify.service', 'threadify.tags', 'threadify.invocation_id'].includes(key)) {
           continue;
         }
 
         if (this.options.refsMap[key] || key.startsWith('threadify.ref.')) {
           const refKey = key.startsWith('threadify.ref.') ? key.replace('threadify.ref.', '') : this.options.refsMap[key];
-          refs[refKey] = value;
+          if (refKey !== 'threadify.external_ref') refs[refKey] = value;
         } else if (key.startsWith('threadify.context.')) {
           context[key.replace('threadify.context.', '')] = value;
         } else {
@@ -220,7 +259,7 @@ export class ThreadifySpanExporter {
       // If this span has no parent, it is the Root Span. When it ends, the trace is done.
       // We automatically end the Threadify thread based on the root span's status.
       const parentSpanId = span.parentSpanId || span.parentSpanContext?.spanId || null;
-      if (!parentSpanId) {
+      if ((!parentSpanId && !this._externalRef(span)) || (this._externalRef(span) && span.attributes['threadify.run.complete'] === true)) {
         if (targetStatus === 'success') {
           await thread.complete('Root span completed successfully');
         } else {
@@ -232,6 +271,7 @@ export class ThreadifySpanExporter {
       }
     } catch (error) {
       this.connection._debugLog('[ThreadifySpanExporter] Failed to process span:', error.message);
+      throw error;
     }
   }
 

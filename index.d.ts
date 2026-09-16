@@ -529,7 +529,7 @@ export class Connection {
    * @param options - Exporter options
    * @returns OTel SpanExporter instance
    */
-  createSpanExporter(options?: { refs?: string[]; filters?: string[] }): ThreadifySpanExporter;
+  createSpanExporter(options?: { refs?: string[]; filters?: string[]; useWorkflowRunId?: boolean }): ThreadifySpanExporter;
 }
 
 export class ThreadifySpanExporter {
@@ -538,7 +538,7 @@ export class ThreadifySpanExporter {
    * @param connection - An established Threadify Connection
    * @param options - Configuration options
    */
-  constructor(connection: Connection, options?: { refs?: string[]; filters?: string[] });
+  constructor(connection: Connection, options?: { refs?: string[]; filters?: string[]; useWorkflowRunId?: boolean });
 
   /**
    * Export batch of spans
