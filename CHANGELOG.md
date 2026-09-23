@@ -2,10 +2,13 @@
 
 All notable changes to the Threadify SDK will be documented in this file.
 
-## Unreleased
+## [0.3.0] - 2026-09-23
 
+### Added
 - Add `connection.thread(threadKey, { refs, label, contract, tags, serviceName }?)`
   to atomically create or resume a thread without storing its internal ID.
+
+### Changed
 - Resume with the stored contract and pinned version; reject conflicting
   contracts and writes to terminal threads.
 - Use `threadify.thread_key` throughout SDK exporters and OTLP ingestion.
