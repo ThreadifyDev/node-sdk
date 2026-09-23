@@ -75,6 +75,17 @@ export interface ThreadOptions {
   external_refs?: ThreadRefs;
 }
 
+/** Creation defaults for a keyed thread. Existing threads keep their stored metadata. */
+export interface ThreadCreationOptions {
+  role?: string;
+  refs?: ThreadRefs;
+  label?: string;
+  /** Used only at creation; a conflicting contract on resume is rejected. */
+  contract?: string;
+  serviceName?: string;
+  tags?: string[];
+}
+
 export interface ArchivedThreadData {
   id: string;
   contractId: string;
@@ -330,8 +341,15 @@ export interface InvitePartyResponse {
 export class ThreadInstance {
   /** Thread ID */
   readonly threadId: string;
+  readonly id: string;
+  readonly threadKey?: string;
+  readonly label?: string;
+  readonly contractName?: string | null;
+  readonly contractVersion?: number | null;
+  readonly refs: ThreadRefs;
+  readonly tags: string[];
   /** Contract ID */
-  readonly contractId: string;
+  readonly contractId: string | null;
   /** User's business role in this thread */
   readonly role?: string;
   /** User's runtime access level in this thread (external/observer/participant/owner) */
@@ -435,14 +453,19 @@ export class Connection {
   /** GraphQL endpoint URL */
   readonly graphqlUrl: string;
 
+  /** Atomically create or resume a tenant-scoped key. Terminal threads cannot resume. */
+  thread(threadKey: string, options?: ThreadCreationOptions): Promise<ThreadInstance>;
+
   /**
    * Start a new thread
+   * @deprecated Use thread(threadKey, options) to create or resume.
    * @param label - Optional label for the thread
    * @param contractName - Contract name (optional for non-contract workflows)
    * @param options - Additional options (serviceName, refs)
    * @returns Promise resolving to new ThreadInstance
    */
-  start(label?: string, contractName?: string, options?: { serviceName?: string; refs?: ThreadRefs }): Promise<ThreadInstance>;
+  start(label?: string, contractName?: string | null, options?: { serviceName?: string; refs?: ThreadRefs; tags?: string[] }): Promise<ThreadInstance>;
+  start(label: string, options: { serviceName?: string; refs?: ThreadRefs; tags?: string[] }): Promise<ThreadInstance>;
 
   /**
    * Join an existing thread

@@ -15,7 +15,7 @@
   },
   "scripts": {
     "build": "node scripts/build-cjs.js",
-    "test": "npm run build && node --test tests/*.test.js",
+    "test": "npm run build && node --test tests/*.test.js tests/*.test.mjs",
     "test:refs": "npm run build && node --test tests/ref-query.test.js",
     "test:connection-errors": "node --test tests/connection-errors.test.js",
     "test:unit": "NODE_OPTIONS=--experimental-vm-modules npx jest",

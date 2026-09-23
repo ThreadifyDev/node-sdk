@@ -61,7 +61,8 @@ test('OTel exporter correlates an invocation without duplicating it into busines
  const exporter=new ThreadifySpanExporter(connection);
  exporter._getOrStartThread=async()=>thread;
  await exporter._processSpan({name:'charge',attributes:{'threadify.invocation_id':'invocation-123','threadify.context.amount':10},parentSpanId:'parent',spanContext:()=>({traceId:'trace',spanId:'span'}),status:{code:1},events:[]});
- assert.equal(recorded.invocationId,'invocation-123');assert.equal(recorded.idempotencyKey,'invocation-123');assert.equal(recorded.context.amount,'10');assert.equal(recorded.context['threadify.invocation_id'],undefined);
+ // Span retries deduplicate by trace/span identity; the invocation is a separate permission reference.
+ assert.equal(recorded.invocationId,'invocation-123');assert.equal(recorded.idempotencyKey,'otel:trace:span');assert.equal(recorded.context.amount,'10');assert.equal(recorded.context['threadify.invocation_id'],undefined);
 });
 
 

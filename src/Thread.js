@@ -110,9 +110,64 @@ export class Connection {
     return this._getDataRetriever().getThreadChain(startThreadId, maxDepth);
   }
 
+  /**
+   * Create or resume a thread by its application-owned key.
+   * Options describe creation defaults. Resuming preserves the stored contract
+   * version, label and refs; an explicitly conflicting contract is rejected.
+   */
+  async thread(threadKey, options = {}) {
+    if (typeof threadKey !== 'string' || !threadKey.trim()) {
+      throw new TypeError('threadKey must be a non-empty string');
+    }
+    threadKey = threadKey.trim();
+    if (new TextEncoder().encode(threadKey).length > 1024) {
+      throw new TypeError('threadKey exceeds 1024 bytes');
+    }
+    if (!options || typeof options !== 'object' || Array.isArray(options)) {
+      throw new TypeError('thread options must be an object');
+    }
+    const allowedOptions = new Set(['label', 'contract', 'serviceName', 'role', 'refs', 'tags']);
+    for (const name of Object.keys(options)) {
+      if (!allowedOptions.has(name)) throw new TypeError(`Unknown thread option: ${name}`);
+    }
+    for (const name of ['label', 'contract', 'serviceName', 'role']) {
+      if (options[name] !== undefined && (typeof options[name] !== 'string' || !options[name].trim())) {
+        throw new TypeError(`${name} must be a non-empty string when supplied`);
+      }
+    }
+    if (options.refs !== undefined && (!options.refs || typeof options.refs !== 'object' || Array.isArray(options.refs) ||
+        Object.entries(options.refs).some(([key, value]) => !key.trim() || typeof value !== 'string'))) {
+      throw new TypeError('refs must be an object with string values');
+    }
+    if (options.tags !== undefined && (!Array.isArray(options.tags) || options.tags.some(tag => typeof tag !== 'string' || !tag.trim()))) {
+      throw new TypeError('tags must be an array of non-empty strings');
+    }
+    if (!this.isConnected) throw new Error('Not connected. Call Threadify.connect() first.');
+    const response = await request(this, {
+      action: 'thread', threadKey,
+      label: options.label, contractName: options.contract,
+      serviceName: options.serviceName || this.serviceName,
+      refs: options.refs, tags: options.tags, role: options.role,
+    });
+    if (!response.threadId || response.threadKey !== threadKey) {
+      throw new Error('Engine returned an invalid thread identity');
+    }
+    const thread = this.threads.get(response.threadId) ||
+      new ThreadInstance(this, response.threadId, response.contractId || null, null, null, response.refs || {});
+    Object.assign(thread, {
+      threadKey: response.threadKey, label: response.label || '',
+      contractId: response.contractId || null, contractName: response.contractName || null,
+      contractVersion: response.contractVersion ?? null,
+      refs: response.refs || {}, tags: response.tags || [],
+    });
+    this.threads.set(response.threadId, thread);
+    return thread;
+  }
+
 
   /**
    * Start a new thread (returns a ThreadInstance)
+   * @deprecated Use connection.thread(threadKey, options) to create or resume.
    * @param {...any} args - Variable arguments:
    *   - start() - Non-contract workflow
    *   - start(label) - Non-contract with label
@@ -210,6 +265,11 @@ export class Connection {
         if (data.action === 'startThread') {
           if (data.status === 'success') {
             const threadInstance = new ThreadInstance(this, data.threadId, contractName, null, null, {});
+            threadInstance.threadKey = data.threadKey;
+            threadInstance.contractName = data.contractName || contractName;
+            threadInstance.contractVersion = data.contractVersion ?? null;
+            threadInstance.label = data.label || options.label || '';
+            threadInstance.refs = data.refs || {};
             threadInstance.tags = (options && Array.isArray(options.tags)) ? [...options.tags] : [];
             // Register thread for notification routing
             this.threads.set(data.threadId, threadInstance);
@@ -237,7 +297,7 @@ export class Connection {
    */
   _recordEvent(eventData) {
     if (!this.threadId) {
-      console.warn('Thread not started. Call thread.start() first.');
+      console.warn('No thread selected. Call connection.thread(threadKey) first.');
       return;
     }
 

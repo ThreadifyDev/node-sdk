@@ -226,7 +226,7 @@ export class ThreadStep {
   _sendEvent() {
     return new Promise((resolve, reject) => {
       if (!this.thread.threadId) {
-        reject(new Error('Thread not started. Call thread.start() first.'));
+        reject(new Error('No thread selected. Call connection.thread(threadKey) first.'));
         return;
       }
 

@@ -13,7 +13,7 @@ import { Threadify } from '@threadify/sdk';
  * Uses addRefs to attach a customer_id for cross-system lookup.
  */
 
-async function runCheckout(customerId) {
+async function runCheckout(customerId, orderId) {
   // 1. Connect to Threadify
   const connection = await Threadify.connect(
     process.env.THREADIFY_API_KEY,
@@ -21,14 +21,14 @@ async function runCheckout(customerId) {
     { engineUrl: process.env.THREADIFY_ENGINE_URL || 'http://localhost:8081' }
   );
 
-  // 2. Start a new thread (no contract)
-  const thread = await connection.start("Checkout Thread");
-  console.log('Thread started:', thread.id);
+  // 2. Create or resume the checkout using the application order ID.
+  const thread = await connection.thread(orderId, { label: "Checkout Thread" });
+  console.log('Thread resolved:', thread.id);
 
   // 3. Add external references — customer_id for support/CRM lookup
   await thread.addRefs({
     customerId: customerId,
-    order_id: `ORD-${Date.now()}`,
+    order_id: orderId,
   });
 
   // --- Step 1: Validate Cart ---
@@ -123,7 +123,7 @@ async function sendConfirmationEmail(customerId) {
 
 // Run example
 const customerId = 'cust_abc123xyz';
-runCheckout(customerId)
+runCheckout(customerId, `ORD-${Date.now()}`)
   .then((threadId) => {
     console.log('Done. View thread:', threadId);
     process.exit(0);

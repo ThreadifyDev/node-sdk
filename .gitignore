@@ -1,9 +1,6 @@
-node_modules/
-*.log
-.DS_Store
-.env
-dist/
-coverage/
 
-# Verified release tarball
-.release/
+examples/**
+node_modules/**
+dist/**
+release/**
+*.log

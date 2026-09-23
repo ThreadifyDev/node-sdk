@@ -50,7 +50,7 @@ const connection = await Threadify.connect(key,'processor',{wsUrl:url.replace('h
 const counts = {};
 const send = connection.ws.send.bind(connection.ws);
 connection.ws.send = (data,...args) => {const q=JSON.parse(data);counts[q.action]=(counts[q.action]||0)+1;return send(data,...args);};
-const makeThread = () => connection.start('Performance test',contract+':1');
+const makeThread = () => connection.thread(randomUUID(), {label:'Performance test',contract:contract+':1'});
 const report = (t,name,status='success',sync=true,amount=1) => t.step(name).idempotencyKey(randomUUID()).addContext({amount,payload:'x'.repeat(256)})[status]('',sync?{waitFor:true}:{});
 const measured = async (values,fn) => {const start=performance.now();const v=await fn();values.push(performance.now()-start);return v;};
 const passed = v => assert.equal(v.validation.decision,'passed');

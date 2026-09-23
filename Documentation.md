@@ -19,7 +19,7 @@ const connection = await Threadify.connect('your-api-key', 'my-service', {
 });
 
 // Start tracking a workflow
-const thread = await connection.start();
+const thread = await connection.thread('order:ORD-12345', { label: 'Order checkout' });
 
 // Record each step with full context
 await thread.step('order_placed')
@@ -38,6 +38,45 @@ The JavaScript SDK derives its WebSocket and GraphQL paths automatically,
 including any proxy prefix. `Threadify.create({ apiKey, serviceName, engineUrl })`
 uses the same setting. Explicit `url`, `wsUrl` and `graphqlUrl` remain available
 for older installations but cannot be combined with `engineUrl`.
+
+## Create or resume by thread key
+
+```javascript
+// Create once, with creation defaults.
+const thread = await connection.thread(sessionId, {
+  label: 'Agent session',
+  contract: 'agent_contract:3',
+  refs: { customerId },
+});
+
+// Another request or worker only needs the application's session ID.
+const resumed = await connection.thread(sessionId);
+await resumed.step('tool_call')
+  .idempotencyKey(toolCallId)
+  .addContext({ tool: 'search' })
+  .success();
+```
+
+`thread(threadKey, options?)` atomically creates or resumes a thread within the
+authenticated company. Keys are trimmed, nonblank strings of at most 1024 UTF-8
+bytes. Concurrent calls resolve to one internal `threadId`; callers do not need
+to store that ID. Normal write permissions still apply.
+
+Options are `label`, `contract`, `refs`, `tags`, `serviceName`, and optional `role`. The stored
+contract and its pinned version are loaded on resume. An omitted contract uses
+the existing binding; a different supplied contract or version is rejected.
+Label, refs, and tags are creation defaults and do not overwrite existing values.
+Use `thread.addRefs()` to explicitly update business references.
+
+A key-only call on a new key creates a free-form thread. Initialize contracted
+sessions before workers or telemetry report activity; a free-form thread cannot
+acquire a contract on resume. Completed, cancelled, closed, or failed threads
+reject further writes and cannot be recreated under the same key.
+
+`start()` remains available for creating unkeyed threads. `join()` still accepts
+an internal ID or invitation. Ordinary business refs are not unique identities.
+For telemetry, use `threadify.thread_key` with the same application key; see
+[OTel correlation](OTEL_CORRELATION.md).
 
 ## Core Concepts
 
@@ -109,7 +148,7 @@ There are two ways to join an existing thread:
 
 ```javascript
 const connection = await Threadify.connect('your-api-key');
-const thread = await connection.start();
+const thread = await connection.thread('order:ORD-123');
 
 // Each step is automatically validated and tracked
 await thread.step('order_received')
@@ -164,11 +203,18 @@ try {
 Contracts enforce workflow structure and validate your steps automatically.
 
 ```javascript
-// Start with latest version of contract
-const thread = await connection.start('order_fulfillment', 'merchant');
+// Create an order with the latest version of its contract.
+const thread = await connection.thread('order:ORD-123', {
+  label: 'Order ORD-123', contract: 'order_fulfillment', serviceName: 'merchant',
+});
 
-// Or use a specific version
-const thread2 = await connection.start('order_fulfillment:v2', 'merchant');
+// Choose a specific contract version for a different order.
+const thread2 = await connection.thread('order:ORD-124', {
+  label: 'Order ORD-124', contract: 'order_fulfillment:2', serviceName: 'merchant',
+});
+
+// Later requests load ORD-123's stored contract and pinned version.
+const resumed = await connection.thread('order:ORD-123');
 
 // Contract validates: entry point, required fields, role access
 await thread.step('order_placed')

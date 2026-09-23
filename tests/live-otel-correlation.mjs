@@ -8,6 +8,8 @@ const exporter = new ThreadifySpanExporter(connection);
 const ids = [];
 const start = connection.start.bind(connection);
 connection.start = async (...args) => { const thread = await start(...args); ids.push(thread.threadId); return thread; };
+const resolveThread = connection.thread.bind(connection);
+connection.thread = async (...args) => { const thread = await resolveThread(...args); ids.push(thread.threadId); return thread; };
 const span = (index, attrs = {}) => ({
   name: 'sdk.tool', resource: { attributes: {} }, attributes: { 'workflow.run_id': ref, ...attrs },
   spanContext: () => ({ traceId: index.toString(16).padStart(32, '0'), spanId: index.toString(16).padStart(16, '0') }),

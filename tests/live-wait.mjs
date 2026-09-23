@@ -12,7 +12,7 @@ const originalSend=connection.ws.send.bind(connection.ws);
 connection.ws.send=(data,...args)=>{sent.push(JSON.parse(data));return originalSend(data,...args);};
 const count=action=>sent.filter(q=>q.action===action).length;
 try {
- const thread=await connection.start('SDK waits',contract,{role:'processor'});
+ const thread=await connection.thread(randomUUID(),{label:'SDK waits',contract});
  const initialWaits=count('waitFor');
  await assert.rejects(thread.waitFor('charge',{timeout:75}),{code:'THREADIFY_WAIT_TIMEOUT'});
  assert.equal(count('waitFor')-initialWaits,1,'pending wait must be a single request');
@@ -26,7 +26,7 @@ try {
  // Observation still reports a rule violation when a caller bypasses the gate.
  await assert.rejects(thread.step('charge').idempotencyKey(randomUUID()).addContext({amount:1}).success('',{waitFor:true}),{code:'THREADIFY_VALIDATION_VIOLATED'});
  // A result from another thread must never satisfy this thread's wait.
- const other=await connection.start('Other thread',contract,{role:'processor'});
+ const other=await connection.thread(randomUUID(),{label:'Other thread',contract});
  await assert.rejects(other.waitForValidation('approval',approval.stepId),{code:'THREADIFY_VALIDATION_UNAVAILABLE'});
  for(let i=0;i<20;i++){
   await thread.step('approval').idempotencyKey(randomUUID()).success('',{waitFor:true});
