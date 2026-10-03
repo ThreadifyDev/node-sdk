@@ -60,6 +60,23 @@ export interface ValidationDecision {
   message?: string; violations?: Array<Record<string, unknown>>;
 }
 export interface InvocationGrant extends ValidationDecision { invocationId: string; cancel(): Promise<ValidationDecision>; }
+export type DecisionCandidate = { action: string; goal?: never } | { goal: string; action?: never };
+export type CanOptions = DecisionCandidate & { context?: Record<string, string | number | boolean> };
+export interface CanDecision {
+  threadId: string; stepName: string; allowed: boolean;
+  status: 'allowed' | 'denied' | 'uncertain' | 'requires_claim';
+  matchedBy: 'exact' | 'classifier' | 'none';
+  requiredSteps: string[]; satisfiedSteps: string[]; missingSteps: string[];
+  previousStep: string | null; reason: string;
+}
+export interface ShouldDecision {
+  threadId: string; stepName: string; eligible: boolean;
+  recommendation: 'yes' | 'no' | 'uncertain' | 'unavailable'; reason: string;
+}
+export interface NextPath {
+  actions: string[]; status: 'allowed' | 'requires_claim'; reason: string;
+}
+export interface NextDecision { threadId: string; paths: NextPath[]; }
 export interface StepResult {
   stepId?: string;
   validation?: ValidationDecision;
@@ -364,6 +381,12 @@ export class ThreadInstance {
   step(stepName: string, options?: ThreadOptions): ThreadStep;
   /** Capture browser action evidence without completing a business step. */
   captureAction(name: string, context?: StepContext, options?: { eventType?: string; path?: string; eventId?: string }): Promise<{ classification: 'free_form' | 'step_candidate' | 'substep' | 'mapped_step' | 'mapping_rejected'; mappedStep?: string; stepId?: string; message?: string }>;
+  /** Read-only eligibility; use waitFor before a side effect. */
+  can(options: CanOptions): Promise<CanDecision>;
+  /** Advisory answer about one candidate action. */
+  should(options: DecisionCandidate): Promise<ShouldDecision>;
+  /** Bounded potential action paths from the current Contract state. */
+  next(): Promise<NextDecision>;
   waitFor(stepName: string, options?: WaitOptions & { invocationId?: string }): Promise<InvocationGrant>;
   waitForValidation(stepName: string, stepId: string, options?: WaitOptions): Promise<ValidationDecision>;
 

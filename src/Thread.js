@@ -3,6 +3,7 @@ import { ThreadStep } from './ThreadStep.js';
 import { Notification } from './Notification.js';
 import { DataRetriever, ArchivedThread, ArchivedStep } from './DataRetriever.js';
 import { ThreadifySpanExporter } from './OtelSpanExporter.js';
+import { CAN_QUERY, SHOULD_QUERY, NEXT_QUERY, decisionCandidate } from './Decisions.js';
 
 /**
  * Connection - Represents a WebSocket connection to Threadify Engine
@@ -1012,6 +1013,33 @@ export class ThreadInstance {
    */
   _onceResponse(handler, reject) {
     this.connection._onceResponse(handler, reject);
+  }
+
+  /** Explain current Contract eligibility; this does not claim execution. */
+  async can(options) {
+    const candidate = decisionCandidate(options);
+    if (options.context !== undefined && (options.context === null || typeof options.context !== 'object' || Array.isArray(options.context))) {
+      throw new TypeError('Context must be a JSON object');
+    }
+    const data = await this.connection._getDataRetriever().graphqlClient.query(CAN_QUERY, {
+      threadId: this.threadId, ...candidate, context: options.context ?? null
+    });
+    return data.can;
+  }
+
+  /** Advisory classifier response for one candidate; this does not claim execution. */
+  async should(options) {
+    const candidate = decisionCandidate(options);
+    const data = await this.connection._getDataRetriever().graphqlClient.query(SHOULD_QUERY, {
+      threadId: this.threadId, ...candidate
+    });
+    return data.should;
+  }
+
+  /** List bounded, Contract-valid paths from the current Thread state. */
+  async next() {
+    const data = await this.connection._getDataRetriever().graphqlClient.query(NEXT_QUERY, { threadId: this.threadId });
+    return data.next;
   }
 
   /**

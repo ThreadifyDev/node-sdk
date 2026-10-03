@@ -157,6 +157,24 @@ await thread.step('order_placed')
   .success();
 ```
 
+## Contract decisions
+
+```javascript
+const paths = await thread.next(); // All currently possible Contract paths.
+const eligibility = await thread.can({ goal: 'I want to process a refund' });
+
+if (eligibility.allowed) {
+  const advice = await thread.should({ action: eligibility.stepName }); // Optional advice.
+  const grant = await thread.waitFor(eligibility.stepName); // Atomic claim.
+  // Execute the action, then report its outcome through thread.step(...).
+}
+```
+
+`can()`, `should()`, and `next()` are read-only snapshots. `next()` does not
+rank paths. An ambiguous goal returns `status: "uncertain"`; fresh prerequisites
+may return `status: "requires_claim"`. Always use `waitFor()` before a guarded
+side effect, even after `can()` reports `allowed`.
+
 See [docs.threadify.dev](https://docs.threadify.dev) for contracts, joining
 threads, the Data Retrieval API, real-time notifications, the OpenTelemetry
 exporter, and step waits.
