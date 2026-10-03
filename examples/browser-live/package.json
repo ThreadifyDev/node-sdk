@@ -1,0 +1,11 @@
+{
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "esbuild ../../src/browser.js --bundle --platform=browser --format=esm --outfile=public/sdk.js",
+    "start": "node server.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.12"
+  }
+}

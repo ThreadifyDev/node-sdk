@@ -960,6 +960,27 @@ export class ThreadInstance {
     return step;
   }
 
+  /** Record action evidence without completing a business step. */
+  async captureAction(name, context = {}, options = {}) {
+    if (typeof name !== 'string' || !name.trim() || name.length > 128) throw new TypeError('Action name must be 1–128 characters');
+    if (!context || typeof context !== 'object' || Array.isArray(context) || Object.keys(context).length > 32) {
+      throw new TypeError('Action context must be an object with at most 32 fields');
+    }
+    const bounded = {};
+    for (const [key, value] of Object.entries(context)) {
+      if (!key || key.length > 128 || !['string', 'number', 'boolean'].includes(typeof value)) {
+        throw new TypeError('Action context fields must have names and primitive values');
+      }
+      bounded[key] = String(value);
+      if (bounded[key].length > 512) throw new TypeError('Action context value exceeds 512 characters');
+    }
+    return request(this.connection, {
+      action: 'recordBrowserAction', threadId: this.threadId, name: name.trim(),
+      eventType: options.eventType || 'manual', path: options.path || '', context: bounded,
+      eventId: options.eventId || globalThis.crypto?.randomUUID?.()
+    });
+  }
+
   /**
    * Get thread ID
    * @returns {string} - Thread ID

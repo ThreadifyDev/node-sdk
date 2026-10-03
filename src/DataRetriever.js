@@ -400,8 +400,9 @@ export class GraphQLClient {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-API-Key': this.apiKey
+          ...(this.apiKey ? { 'X-API-Key': this.apiKey } : {})
         },
+        credentials: 'same-origin',
         body: JSON.stringify({
           query,
           variables

@@ -362,6 +362,8 @@ export class ThreadInstance {
    * @returns New ThreadStep instance
    */
   step(stepName: string, options?: ThreadOptions): ThreadStep;
+  /** Capture browser action evidence without completing a business step. */
+  captureAction(name: string, context?: StepContext, options?: { eventType?: string; path?: string; eventId?: string }): Promise<{ classification: 'free_form' | 'step_candidate' | 'substep' | 'mapped_step' | 'mapping_rejected'; mappedStep?: string; stepId?: string; message?: string }>;
   waitFor(stepName: string, options?: WaitOptions & { invocationId?: string }): Promise<InvocationGrant>;
   waitForValidation(stepName: string, stepId: string, options?: WaitOptions): Promise<ValidationDecision>;
 

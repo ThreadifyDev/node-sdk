@@ -1,6 +1,10 @@
 
 examples/**
+!examples/browser-live/
+!examples/browser-live/**
 node_modules/**
+node_modules
+examples/browser-live/public/sdk.js
 dist/**
 release/**
 *.log

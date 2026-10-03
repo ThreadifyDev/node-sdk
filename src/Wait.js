@@ -1,5 +1,10 @@
-import { randomUUID } from 'node:crypto';
-import { performance } from 'node:perf_hooks';
+// Request IDs correlate responses; they are not authentication credentials.
+let requestSequence = 0;
+function randomUUID() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  requestSequence = (requestSequence + 1) >>> 0;
+  return `${Date.now().toString(16)}-${requestSequence.toString(16)}-${Math.random().toString(16).slice(2)}`;
+}
 
 export function waitError(code, message, detail = {}) {
   return Object.assign(new Error(message), { code, ...detail });

@@ -11,6 +11,10 @@
       "types": "./index.d.ts",
       "import": "./src/index.js",
       "require": "./dist/index.cjs"
+    },
+    "./browser": {
+      "types": "./browser.d.ts",
+      "import": "./src/browser.js"
     }
   },
   "scripts": {
@@ -48,6 +52,7 @@
     "src/",
     "dist/",
     "index.d.ts",
+    "browser.d.ts",
     "README.md",
     "LICENSE"
   ],
