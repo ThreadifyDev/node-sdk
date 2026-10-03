@@ -7,4 +7,5 @@ node_modules
 examples/browser-live/public/sdk.js
 dist/**
 release/**
+.release/
 *.log
