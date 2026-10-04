@@ -9,7 +9,7 @@ const output = path.resolve('.release');
 fs.mkdirSync(output, { recursive: true });
 const [packed] = JSON.parse(execFileSync(npm, ['pack', '--json', '--ignore-scripts', '--pack-destination', output], { encoding: 'utf8' }));
 const files = new Set(packed.files.map(file => file.path));
-for (const required of ['src/index.js', 'dist/index.cjs', 'index.d.ts', 'README.md']) {
+for (const required of ['src/index.js', 'dist/index.cjs', 'index.d.ts', 'browser.d.ts', 'src/browser.js', 'README.md']) {
   assert.ok(files.has(required), `Package missing ${required}`);
 }
 for (const file of files) {
@@ -25,13 +25,16 @@ try {
     import assert from 'node:assert/strict';
     import { createRequire } from 'node:module';
     import { Threadify as esm } from '@threadify/sdk';
+    import { ThreadifyBrowser } from '@threadify/sdk/browser';
     const { Threadify: cjs } = createRequire(import.meta.url)('@threadify/sdk');
     assert.equal(typeof esm.connect, 'function');
     assert.equal(typeof cjs.connect, 'function');
+    assert.equal(typeof ThreadifyBrowser.connect, 'function');
+    assert.equal(typeof ThreadifyBrowser.autoCapture, 'function');
   `;
   fs.writeFileSync(path.join(consumer, 'check.mjs'), checks);
   execFileSync(process.execPath, ['check.mjs'], {cwd: consumer, stdio: 'inherit'});
-  console.log(`Verified packed ESM and CommonJS entry points: ${archive}`);
+  console.log(`Verified packed ESM, CommonJS, and browser entry points: ${archive}`);
 } finally {
   fs.rmSync(consumer, {recursive: true, force: true});
 }

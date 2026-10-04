@@ -118,7 +118,7 @@ capture.stop();
 `include` accepts action names from `data-threadify-action` or CSS selectors.
 `data-threadify-step="order_placed"` is another way to map an included action.
 Alternatively, an Engine administrator can set an action-to-step rule in
-the contract version page under **Action links**, one
+the contract version page under **Input config**, one
 `action=contract_step` per line. Comma-separated actions can share a step, as
 in `click_a,click_b=contract_step`. The website then only needs auto capture and
 the active thread; it does not need to declare that step mapping. Rules apply
@@ -127,6 +127,8 @@ Engine. Earlier activity stays as evidence rather than becoming completed
 steps retroactively. A capture result reports `mapped_step` and its `stepId`,
 or `mapping_rejected` with a reason when the step could not be recorded.
 Publishing a new contract version copies links whose target steps still exist.
+Input config covers OTel spans and auto-captured browser actions; direct SDK
+events bypass these mappings.
 Forms may mark specific inputs with `data-threadify-context="fieldName"` to
 add their values; password and file inputs are skipped. Auto capture does not
 read unmarked input values. Capture continues across SPA route changes while

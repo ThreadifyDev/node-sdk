@@ -2,6 +2,20 @@
 
 All notable changes to the Threadify SDK will be documented in this file.
 
+## [0.4.0] - 2026-10-04
+
+### Added
+- Browser entry point `@threadify/sdk/browser` with native WebSocket transport,
+  short-lived scoped grants, and automatic grant renewal.
+- Opt-in browser action capture with component include lists, explicit step
+  mappings, declared context, and manual `captureAction()`.
+- Contract decision queries `can()`, `should()`, and `next()` with typed results.
+- Browser sample application and TypeScript declarations.
+
+### Compatibility
+- Engine-managed input mappings apply to auto-captured browser actions and
+  OTel spans. Direct SDK events continue through normal contract validation.
+
 ## [0.3.0] - 2026-09-23
 
 ### Added
