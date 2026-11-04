@@ -7,6 +7,14 @@ import { request, waitOptions, checkedValidation } from './Wait.js';
  *   .addContext({ orderId: 'ORD-12345' })
  *   .success();
  */
+let privateContextWarned = false;
+function warnPrivateContextDeprecated() {
+  if (privateContextWarned) return;
+  privateContextWarned = true;
+  console.warn('[threadify] addContext(data, true) is deprecated: Threadify has no private context. ' +
+    'The values are stored as normal context and are visible to anyone who can read the thread.');
+}
+
 export class ThreadStep {
   constructor(stepName, thread, serviceName = null) {
     this.stepName = stepName;
@@ -70,23 +78,20 @@ export class ThreadStep {
   /**
    * Add context data to this step
    * @param {Object} contextData - Key-value pairs to add to step context
-   * @param {boolean} isPrivate - Whether this context is private (optional)
+   * @param {boolean} [isPrivate] - Deprecated and ignored. Threadify has no private
+   *   context: every value is stored and visible like any other context field.
    * @returns {ThreadStep} - Returns this for method chaining
    */
   addContext(contextData, isPrivate = false) {
     if (typeof contextData !== 'object' || contextData === null) {
       throw new Error('Context data must be an object');
     }
-    
+    if (isPrivate) warnPrivateContextDeprecated();
+
     // Convert all values to strings as expected by server schema
     const stringifiedContext = {};
     for (const [key, value] of Object.entries(contextData)) {
       stringifiedContext[key] = String(value);
-      
-      // Mark private context with special prefix if needed
-      if (isPrivate) {
-        stringifiedContext[`private_${key}`] = String(value);
-      }
     }
     
     this.event.context = { ...this.event.context, ...stringifiedContext };

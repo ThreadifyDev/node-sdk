@@ -1187,7 +1187,6 @@ export class ThreadInstance {
 
   /**
    * Close the thread and mark it as cancelled on the server
-   * @deprecated Use thread.end('cancelled', reason) instead
    * Marks the thread as cancelled
    * @param {string|Object} reason - Optional reason for closure (string) or data object
    * @returns {Promise<Object>} - Server response
@@ -1198,7 +1197,6 @@ export class ThreadInstance {
 
   /**
    * Mark the thread as completed on the server
-   * @deprecated Use thread.end('completed', reason) instead
    * For contract-linked threads, this will be rejected unless terminal state is reached
    * @param {string|Object} reason - Optional reason for completion (string) or data object
    * @returns {Promise<Object>} - Server response

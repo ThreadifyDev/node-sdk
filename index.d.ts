@@ -24,6 +24,8 @@ export interface ThreadifyConnectOptions {
   graphqlUrl?: string;
   /** Enable debug logging (default: false) */
   debug?: boolean;
+  /** How many notifications may await acknowledgement at once, 1-100 (default: 10) */
+  maxInFlight?: number;
 }
 
 export interface StepContext {
@@ -266,10 +268,13 @@ export class ThreadStep {
   /**
    * Add context data to this step
    * @param contextData - Key-value pairs to add to step context
-   * @param isPrivate - Whether this context is private
+   * @param isPrivate - Deprecated and ignored. Threadify has no private context;
+   *   values are stored and visible like any other context field.
    * @returns This ThreadStep instance for chaining
    */
-  addContext(contextData: StepContext, isPrivate?: boolean): ThreadStep;
+  addContext(contextData: StepContext): ThreadStep;
+  /** @deprecated Threadify has no private context. The flag is ignored; use addContext(data). */
+  addContext(contextData: StepContext, isPrivate: boolean): ThreadStep;
 
   /**
    * Add a sub-step to be sent when this step completes
@@ -355,6 +360,13 @@ export interface InvitePartyResponse {
   expiresAt: string;
 }
 
+export interface ThreadEndResult {
+  threadId: string;
+  status: string;
+  endedAt?: string;
+  message?: string;
+}
+
 export class ThreadInstance {
   /** Thread ID */
   readonly threadId: string;
@@ -375,10 +387,10 @@ export class ThreadInstance {
   /**
    * Create a new step in this thread
    * @param stepName - Name of the step
-   * @param options - Thread options
+   * @param serviceName - Overrides the connection's service name for this step
    * @returns New ThreadStep instance
    */
-  step(stepName: string, options?: ThreadOptions): ThreadStep;
+  step(stepName: string, serviceName?: string): ThreadStep;
   /** Capture browser action evidence without completing a business step. */
   captureAction(name: string, context?: StepContext, options?: { eventType?: string; path?: string; eventId?: string }): Promise<{ classification: 'free_form' | 'step_candidate' | 'substep' | 'mapped_step' | 'mapping_rejected'; mappedStep?: string; stepId?: string; message?: string }>;
   /** Read-only eligibility; use waitFor before a side effect. */
@@ -413,26 +425,12 @@ export class ThreadInstance {
   inviteParty(options: InvitePartyOptions): Promise<InvitePartyResponse>;
 
   /**
-   * Get thread metadata
-   * @returns Promise resolving to thread metadata
-   */
-  getMetadata(): Promise<any>;
-
-  /**
-   * Close the thread on the server (marks thread as closed)
-   * Requires appropriate permissions (owner or participant with thread.close permission)
-   * @param reason - Optional reason for closing (string) or data object
-   * @returns Promise resolving to close response
+   * Cancel the thread. Use this when a run without a contract is abandoned.
+   * @param reason - Optional reason (string) or data object
    * @example
-   * await thread.close('Order cancelled by customer');
-   * await thread.close({ reason: 'Order cancelled', cancelledBy: 'customer' });
+   * await thread.cancel('Order cancelled by customer');
    */
-  close(reason?: string | Record<string, any>): Promise<{
-    threadId: string;
-    status: string;
-    closedAt: string;
-    message: string;
-  }>;
+  cancel(reason?: string | Record<string, any>): Promise<ThreadEndResult>;
 
   /**
    * Mark the thread as completed on the server
@@ -444,26 +442,8 @@ export class ThreadInstance {
    * await thread.complete('All steps finished');
    * await thread.complete({ totalSteps: 5, duration: 120 });
    */
-  complete(reason?: string | Record<string, any>): Promise<{
-    threadId: string;
-    status: string;
-    closedAt: string;
-    message: string;
-  }>;
+  complete(reason?: string | Record<string, any>): Promise<ThreadEndResult>;
 
-  /**
-   * Add a notification handler
-   * @param eventName - Event name to listen for
-   * @param handler - Event handler function
-   */
-  on(eventName: string, handler: (data: NotificationData) => void): void;
-
-  /**
-   * Remove a notification handler
-   * @param eventName - Event name
-   * @param handler - Event handler function to remove
-   */
-  off(eventName: string, handler: (data: NotificationData) => void): void;
 }
 
 export interface NotificationHandlers {
@@ -534,6 +514,11 @@ export class Connection {
   getThreadChain(startThreadId: string, maxDepth?: number): Promise<ArchivedThread[]>;
 
   /**
+   * Get validation results for a thread, optionally for one step
+   */
+  getValidationResults(threadId: string, stepName?: string): Promise<ValidationResult[]>;
+
+  /**
    * Subscribe to notification events for a specific step
    * @param event - Event pattern:
    *   - 'step.success' - Step executed successfully
@@ -557,27 +542,41 @@ export class Connection {
    *   notif.ack();
    * });
    */
-  subscribe(event: string, stepIdentifier: string, handler: (notification: any) => void): Connection;
+  subscribe(event: string, stepIdentifier: string, handler: (notification: Notification) => void): Connection;
+  /** Thread-level events such as 'thread.completed' */
+  subscribe(event: string, handler: (notification: Notification) => void): Connection;
 
   /**
    * Unsubscribe from notification events
    * @param event - Event pattern to unsubscribe from
-   * @param stepIdentifier - Step name or "contractName@stepName"
+   * @param stepIdentifier - Step name or "contractName@stepName"; omit for thread-level events
    * @returns Connection instance for chaining
    */
-  unsubscribe(event: string, stepIdentifier: string): Connection;
+  unsubscribe(event: string, stepIdentifier?: string): Connection;
 
   /**
    * Close the WebSocket connection
    */
-  close(): void;
+  close(): Promise<void>;
 
   /**
    * Create an OpenTelemetry SpanExporter connected to this thread instance
    * @param options - Exporter options
    * @returns OTel SpanExporter instance
    */
-  createSpanExporter(options?: { refs?: string[]; filters?: string[]; useWorkflowRunId?: boolean }): ThreadifySpanExporter;
+  createSpanExporter(options?: SpanExporterOptions): ThreadifySpanExporter;
+}
+
+export interface SpanExporterOptions {
+  /**
+   * Span attributes to copy onto the thread as references. A list keeps the
+   * attribute name; a map renames it: { 'customer.id': 'customer_id' }.
+   */
+  refs?: string[] | Record<string, string>;
+  /** Span names to drop. A trailing * matches a prefix. */
+  filters?: string[];
+  /** Group spans by workflow.run_id when no thread key is set (default: true) */
+  useWorkflowRunId?: boolean;
 }
 
 export class ThreadifySpanExporter {
@@ -586,7 +585,7 @@ export class ThreadifySpanExporter {
    * @param connection - An established Threadify Connection
    * @param options - Configuration options
    */
-  constructor(connection: Connection, options?: { refs?: string[]; filters?: string[]; useWorkflowRunId?: boolean });
+  constructor(connection: Connection, options?: SpanExporterOptions);
 
   /**
    * Export batch of spans
@@ -637,16 +636,34 @@ export class Threadify {
 }
 
 export class Notification {
-  /** Thread ID */
+  /** Unique notification ID; use it to ignore redeliveries */
+  readonly notificationId: string;
   readonly threadId: string;
-  /** Step name */
+  readonly stepId?: string;
   readonly stepName: string;
-  /** Notification status */
+  /** Contract name; empty for threads without a contract */
+  readonly contractName: string;
+  /** 'passed', 'violated' or 'none' */
   readonly status: string;
-  /** Notification message */
+  /** 'success', 'failed' or 'error' */
+  readonly stepStatus?: string;
+  /** 'critical', 'major', 'minor', 'warning' or 'info' */
+  readonly severity?: string;
   readonly message?: string;
-  /** Notification context */
-  readonly context?: StepContext;
-  /** Timestamp */
-  readonly timestamp: string;
+  readonly details: Record<string, any>;
+  readonly timestamp: Date;
+  readonly violationType: string | null;
+  readonly ownerId?: string;
+
+  /** Acknowledge the notification after handling it; unacknowledged notifications are redelivered */
+  ack(): void;
+  isViolated(): boolean;
+  isPassed(): boolean;
+  isCritical(): boolean;
+  isWarning(): boolean;
+  isInfo(): boolean;
+  isSuccess(): boolean;
+  isFailed(): boolean;
+  isError(): boolean;
 }
+

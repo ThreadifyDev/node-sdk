@@ -2,6 +2,21 @@
 
 All notable changes to the Threadify SDK will be documented in this file.
 
+## [Unreleased]
+
+### Deprecated
+- `addContext(data, true)`: Threadify has no private context. The flag is now
+  ignored with a one-time warning, and the duplicate `private_<key>` field is no
+  longer sent. Values are stored as normal context.
+
+### Fixed
+- TypeScript declarations now match the runtime: `ThreadInstance.cancel()`,
+  `Connection.getValidationResults()`, two-argument `subscribe()`, async
+  `close()`, `maxInFlight`, map-form exporter `refs`, `Notification.ack()` and
+  its fields, and `step(name, serviceName)`. Removed `ThreadInstance.close()`,
+  `on()`, `off()` and `getMetadata()`, which never existed at runtime.
+- Removed incorrect deprecation notices from `cancel()` and `complete()`.
+
 ## [0.4.0] - 2026-10-04
 
 ### Added
